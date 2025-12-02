@@ -1,0 +1,10 @@
+rules_version = '2';
+service cloud.firestore {
+match /databases/{database}/documents {
+// This allows read/write access to ALL collections forever (no 30-day limit)
+// This replaces the default "Test Mode" which expires after 30 days.
+match /{document=**} {
+allow read, write: if true;
+}
+}
+}
