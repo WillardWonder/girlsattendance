@@ -5,7 +5,8 @@ import {
   Search, CheckCircle, Scale, AlertCircle, UserPlus, ClipboardList, UploadCloud, Users, 
   Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, Unlock, 
   History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
-  CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, ShieldAlert
+  CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
+  ShieldAlert, BookOpen, Battery, Smile, Zap
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -32,9 +33,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // --- PRELOADED DATA ---
-const PRELOADED_ROSTER = [
-  // You can paste the girls roster here later
-];
+const PRELOADED_ROSTER = [];
 
 const App = () => {
   // Main View State: 'athlete' or 'coach'
@@ -58,6 +57,14 @@ const App = () => {
   const [skinCheck, setSkinCheck] = useState(true);
   const [checkInSuccess, setCheckInSuccess] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+
+  // Journal State
+  const [journalGratitude, setJournalGratitude] = useState('');
+  const [focusWord, setFocusWord] = useState('');
+  const [focusStatement, setFocusStatement] = useState('');
+  const [energyLevel, setEnergyLevel] = useState(3);
+  const [moodLevel, setMoodLevel] = useState(3);
+  const [journalSuccess, setJournalSuccess] = useState(false);
 
   // Stats View State
   const [statsStudent, setStatsStudent] = useState<any>(null);
@@ -226,6 +233,44 @@ const App = () => {
       } else {
         setError("Check-in failed.");
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleJournalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedStudent || !focusWord) { setError("Name and Focus Word required."); return; }
+    setLoading(true);
+
+    const data = {
+      studentId: selectedStudent.id,
+      name: selectedStudent.name,
+      gratitude: journalGratitude,
+      focusWord,
+      focusStatement,
+      energy: energyLevel,
+      mood: moodLevel,
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString()
+    };
+
+    try {
+      await addDoc(collection(db, "journals"), data);
+      // Optional: Send to Google Sheets if you update the script to handle journals
+      setJournalSuccess(true);
+      setTimeout(() => {
+        setJournalSuccess(false);
+        setJournalGratitude('');
+        setFocusWord('');
+        setFocusStatement('');
+        setEnergyLevel(3);
+        setMoodLevel(3);
+        setSearchTerm('');
+        setSelectedStudent(null);
+      }, 2500);
+    } catch (err) {
+      setError("Failed to save journal.");
     } finally {
       setLoading(false);
     }
@@ -691,16 +736,15 @@ const App = () => {
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
       
       {/* SUCCESS SCREEN OVERLAY */}
-      {checkInSuccess ? (
+      {checkInSuccess || journalSuccess ? (
         <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center p-6 animate-in zoom-in">
           <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center border border-green-500/30 w-full max-w-sm">
             <div className="mx-auto bg-green-500/20 w-24 h-24 rounded-full flex items-center justify-center mb-6">
               <CheckCircle className="w-12 h-12 text-green-400" />
             </div>
-            <h2 className="text-3xl font-bold text-white mb-2">Checked In!</h2>
+            <h2 className="text-3xl font-bold text-white mb-2">{journalSuccess ? 'Log Saved!' : 'Checked In!'}</h2>
             <p className="text-gray-400">Screen will reset automatically...</p>
-            {/* Cloud Sync Status Indicator */}
-            {GOOGLE_SCRIPT_URL && (
+            {syncStatus !== 'idle' && !journalSuccess && (
                <div className={`mt-4 flex justify-center items-center gap-1 text-xs font-bold ${syncStatus === 'error' ? 'text-red-400' : 'text-blue-400'}`}>
                  <CloudLightning className={`w-4 h-4 ${syncStatus === 'syncing' ? 'animate-pulse' : ''}`} />
                  {syncStatus === 'syncing' && 'Syncing Sheet...'}
@@ -799,14 +843,115 @@ const App = () => {
               </div>
             )}
 
-            {/* 2. VIDEOS TAB */}
+            {/* 2. JOURNAL TAB (NEW) */}
+            {activeTab === 'journal' && (
+              <div className="animate-in fade-in slide-in-from-bottom-2">
+                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
+                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-pink-400"/> Wrestling Mindset
+                  </h2>
+
+                  {/* Name Search (If not already selected) */}
+                  {!selectedStudent ? (
+                    <div className="relative mb-6">
+                      <div className="relative">
+                        <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
+                        <input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." 
+                          className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" />
+                      </div>
+                      {searchTerm && (
+                        <div className="absolute z-10 w-full bg-gray-700 border border-gray-600 mt-1 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                          {filteredRoster.map(s => (
+                            <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50">
+                              <span className="font-bold text-white">{s.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex justify-between items-center">
+                        <span className="flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Log for: <b>{selectedStudent.name}</b></span>
+                        <button onClick={() => setSelectedStudent(null)} className="text-xs underline">Change</button>
+                      </div>
+
+                      {/* Gratitude */}
+                      <div>
+                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Daily Gratitude</label>
+                        <textarea 
+                          className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20"
+                          placeholder="I am grateful for..."
+                          value={journalGratitude}
+                          onChange={(e) => setJournalGratitude(e.target.value)}
+                        />
+                      </div>
+
+                      {/* Focus Word */}
+                      <div>
+                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Today's Focus Word</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => (
+                            <button
+                              key={word}
+                              onClick={() => setFocusWord(word)}
+                              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${focusWord === word ? 'bg-pink-600 border-pink-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'}`}
+                            >
+                              {word}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Focus Statement */}
+                      {focusWord && (
+                        <div className="animate-in fade-in">
+                          <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Statement</label>
+                          <textarea 
+                            className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20"
+                            placeholder={`How will you be ${focusWord.toLowerCase()} today?`}
+                            value={focusStatement}
+                            onChange={(e) => setFocusStatement(e.target.value)}
+                          />
+                        </div>
+                      )}
+
+                      {/* Wellness Check */}
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Battery className="w-3 h-3"/> Energy Level</label>
+                          <div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">
+                            {[1, 2, 3, 4, 5].map(lvl => (
+                              <button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Smile className="w-3 h-3"/> Mood</label>
+                          <div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">
+                            {[1, 2, 3, 4, 5].map(lvl => (
+                              <button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button onClick={handleJournalSubmit} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">
+                        {loading ? 'Saving...' : 'Submit Daily Log'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. VIDEOS TAB */}
             {activeTab === 'resources' && (
               <div className="space-y-4 animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">Training Videos</h2>
                 {resources.length === 0 && <div className="text-center text-gray-500 py-10">No videos added yet by coach.</div>}
                 {resources.map(vid => (
                   <div key={vid.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
-                    {/* Basic Embed or Link */}
                     <div className="p-4">
                       <h3 className="font-bold text-white text-lg mb-1">{vid.title}</h3>
                       <a href={vid.url} target="_blank" rel="noreferrer" className="text-pink-400 text-sm flex items-center gap-1 hover:underline">
@@ -818,7 +963,7 @@ const App = () => {
               </div>
             )}
 
-            {/* 3. CALENDAR TAB */}
+            {/* 4. CALENDAR TAB */}
             {activeTab === 'calendar' && (
               <div className="space-y-3 animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">Season Schedule</h2>
@@ -851,7 +996,7 @@ const App = () => {
               </div>
             )}
 
-            {/* 4. STATS TAB */}
+            {/* 5. STATS TAB */}
             {activeTab === 'stats' && (
               <div className="animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">My Weight Tracker</h2>
@@ -898,22 +1043,26 @@ const App = () => {
           </div>
 
           {/* BOTTOM NAVIGATION */}
-          <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-4 flex justify-between items-center z-40">
-            <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <CheckCircle className="w-6 h-6" />
-              <span className="text-[10px] mt-1 font-bold">Check In</span>
+          <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-2 flex justify-around items-center z-40">
+            <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <CheckCircle className="w-5 h-5" />
+              <span className="text-[9px] mt-1 font-bold">Check In</span>
             </button>
-            <button onClick={() => setActiveTab('resources')} className={`flex flex-col items-center p-2 ${activeTab === 'resources' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <Video className="w-6 h-6" />
-              <span className="text-[10px] mt-1 font-bold">Videos</span>
+            <button onClick={() => setActiveTab('journal')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'journal' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <BookOpen className="w-5 h-5" />
+              <span className="text-[9px] mt-1 font-bold">Mindset</span>
             </button>
-            <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center p-2 ${activeTab === 'calendar' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <Calendar className="w-6 h-6" />
-              <span className="text-[10px] mt-1 font-bold">Schedule</span>
+            <button onClick={() => setActiveTab('resources')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'resources' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <Video className="w-5 h-5" />
+              <span className="text-[9px] mt-1 font-bold">Videos</span>
             </button>
-            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center p-2 ${activeTab === 'stats' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <TrendingUp className="w-6 h-6" />
-              <span className="text-[10px] mt-1 font-bold">My Stats</span>
+            <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'calendar' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <Calendar className="w-5 h-5" />
+              <span className="text-[9px] mt-1 font-bold">Schedule</span>
+            </button>
+            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'stats' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <TrendingUp className="w-5 h-5" />
+              <span className="text-[9px] mt-1 font-bold">Stats</span>
             </button>
           </div>
           
