@@ -6,7 +6,7 @@ import {
   Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, Unlock, 
   History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
-  ShieldAlert, BookOpen, Battery, Smile, Zap
+  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -23,17 +23,20 @@ const firebaseConfig = {
 };
 
 // 2. GOOGLE SHEETS INTEGRATION
-const GOOGLE_SCRIPT_URL = ""; 
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 
 // 3. GOOGLE CALENDAR ID
-const GOOGLE_CALENDAR_ID = ""; 
+// I extracted this from your link:
+const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // --- PRELOADED DATA ---
-const PRELOADED_ROSTER = [];
+const PRELOADED_ROSTER = [
+  // You can paste the girls roster here later
+];
 
 const App = () => {
   // Main View State: 'athlete' or 'coach'
@@ -65,6 +68,13 @@ const App = () => {
   const [energyLevel, setEnergyLevel] = useState(3);
   const [moodLevel, setMoodLevel] = useState(3);
   const [journalSuccess, setJournalSuccess] = useState(false);
+
+  // Focus Game State
+  const [focusState, setFocusState] = useState<'idle' | 'playing' | 'finished'>('idle');
+  const [focusGrid, setFocusGrid] = useState<number[]>([]);
+  const [focusNextNumber, setFocusNextNumber] = useState(0);
+  const [focusTimeLeft, setFocusTimeLeft] = useState(120); // 2 minutes
+  const [focusScore, setFocusScore] = useState(0);
 
   // Stats View State
   const [statsStudent, setStatsStudent] = useState<any>(null);
@@ -154,10 +164,7 @@ const App = () => {
           const attSnap = await getDocs(attQ);
           setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()})));
         } catch (e: any) {
-          console.error("Admin Fetch Error:", e);
-          if (e.message && e.message.includes("Missing or insufficient permissions")) {
-            setPermissionError(true);
-          }
+          if (e.message && e.message.includes("permissions")) setPermissionError(true);
         }
       };
       fetchAdminData();
@@ -189,6 +196,62 @@ const App = () => {
     }
   };
 
+  // --- FOCUS GAME LOGIC ---
+  
+  useEffect(() => {
+    let timer: any;
+    if (focusState === 'playing' && focusTimeLeft > 0) {
+      timer = setInterval(() => {
+        setFocusTimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (focusTimeLeft === 0 && focusState === 'playing') {
+      endFocusGame();
+    }
+    return () => clearInterval(timer);
+  }, [focusState, focusTimeLeft]);
+
+  const startFocusGame = () => {
+    if (!selectedStudent) { alert("Please select your name first."); return; }
+    // Generate 00-99 array
+    const numbers = Array.from({length: 100}, (_, i) => i);
+    // Shuffle (Fisher-Yates)
+    for (let i = numbers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+    }
+    setFocusGrid(numbers);
+    setFocusNextNumber(0);
+    setFocusScore(0);
+    setFocusTimeLeft(120);
+    setFocusState('playing');
+  };
+
+  const handleGridClick = (num: number) => {
+    if (num === focusNextNumber) {
+        const newScore = focusNextNumber + 1;
+        setFocusNextNumber(newScore);
+        setFocusScore(newScore);
+        if (newScore === 100) endFocusGame(true);
+    }
+  };
+
+  const endFocusGame = async (completed = false) => {
+    setFocusState('finished');
+    // Save Score
+    if (selectedStudent) {
+        const scoreData = {
+            studentId: selectedStudent.id,
+            name: selectedStudent.name,
+            score: completed ? 100 : focusNextNumber,
+            completed,
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString(),
+            type: 'focus_drill'
+        };
+        await addDoc(collection(db, "focus_scores"), scoreData);
+    }
+  };
+
   // --- ACTIONS ---
 
   const handleCheckIn = async (e: React.FormEvent) => {
@@ -206,7 +269,8 @@ const App = () => {
       notes,
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      type: 'attendance'
     };
 
     try {
@@ -226,13 +290,8 @@ const App = () => {
         setSyncStatus('idle');
       }, 2500);
     } catch (err: any) {
-      console.error(err);
-      if (err.message && err.message.includes("Missing or insufficient permissions")) {
-        setPermissionError(true);
-        setError("Database Locked. Coach needs to fix permissions.");
-      } else {
-        setError("Check-in failed.");
-      }
+      if (err.message && err.message.includes("permissions")) setPermissionError(true);
+      else setError("Check-in failed.");
     } finally {
       setLoading(false);
     }
@@ -252,12 +311,17 @@ const App = () => {
       energy: energyLevel,
       mood: moodLevel,
       timestamp: new Date().toISOString(),
-      date: new Date().toLocaleDateString()
+      date: new Date().toLocaleDateString(),
+      type: 'journal'
     };
 
     try {
       await addDoc(collection(db, "journals"), data);
-      // Optional: Send to Google Sheets if you update the script to handle journals
+      if (GOOGLE_SCRIPT_URL) {
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+        }).then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
+      }
       setJournalSuccess(true);
       setTimeout(() => {
         setJournalSuccess(false);
@@ -327,11 +391,7 @@ const App = () => {
   const handleDeleteCheckIn = async (id: string, name: string) => {
     if(!confirm(`Remove ${name}?`)) return;
     await deleteDoc(doc(db, "attendance", id));
-    // Trigger refetch
-    const today = new Date().toLocaleDateString();
-    const attQ = query(collection(db, "attendance"), where("date", "==", today));
-    const attSnap = await getDocs(attQ);
-    setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()})));
+    // Trigger refetch handled by effect
   };
 
   const handleCopyForSheets = (date: string) => {
@@ -357,13 +417,8 @@ const App = () => {
             return rDate >= start && rDate <= end;
         });
 
-        if (reportStudentFilter) {
-            records = records.filter(r => r.name === reportStudentFilter);
-        }
-
-        if (reportGradeFilter) {
-            records = records.filter(r => r.grade === reportGradeFilter);
-        }
+        if (reportStudentFilter) records = records.filter(r => r.name === reportStudentFilter);
+        if (reportGradeFilter) records = records.filter(r => r.grade === reportGradeFilter);
 
         if (records.length === 0) {
             alert("No records found matching these filters.");
@@ -504,33 +559,19 @@ const App = () => {
 
   // ---------------- UI ----------------
 
-  // PERMISSION ERROR SCREEN
   if (permissionError) {
     return (
       <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
         <div className="bg-red-900/20 border border-red-500 p-8 rounded-xl max-w-lg w-full text-center">
           <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-white mb-4">Database Locked</h2>
-          <p className="text-gray-300 mb-6">
-            The app cannot access the database. This happens when you create a new Firebase project but forget to set the Security Rules.
-          </p>
-          <div className="text-left bg-black/50 p-4 rounded-lg font-mono text-xs text-green-400 mb-6 overflow-x-auto">
-            <p className="text-gray-500 mb-2">// Go to Firebase Console &gt; Firestore Database &gt; Rules</p>
-            <p>match /databases/&#123;database&#125;/documents &#123;</p>
-            <p className="pl-4">match /&#123;document=**&#125; &#123;</p>
-            <p className="pl-8">allow read, write: if true;</p>
-            <p className="pl-4">&#125;</p>
-            <p>&#125;</p>
-          </div>
-          <button onClick={() => window.location.reload()} className="bg-red-600 hover:bg-red-500 text-white font-bold py-3 px-6 rounded-lg w-full">
-            I Fixed It, Reload App
-          </button>
+          <p className="text-gray-300 mb-6">Coach needs to fix Firebase security permissions.</p>
+          <button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full">Reload</button>
         </div>
       </div>
     );
   }
 
-  // 1. COACH LOGIN SCREEN
   if (appMode === 'coach' && !isCoachAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
@@ -548,7 +589,6 @@ const App = () => {
     );
   }
 
-  // 2. COACH DASHBOARD
   if (appMode === 'coach' && isCoachAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
@@ -556,8 +596,6 @@ const App = () => {
           <h1 className="text-xl font-bold">Coach Dashboard</h1>
           <button onClick={() => setAppMode('athlete')} className="text-xs bg-gray-800 px-3 py-1 rounded">Exit</button>
         </div>
-
-        {/* Admin Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {['live', 'content', 'history', 'roster'].map(t => (
             <button key={t} onClick={() => setAdminTab(t)} 
@@ -566,8 +604,6 @@ const App = () => {
             </button>
           ))}
         </div>
-
-        {/* LIVE TAB */}
         {adminTab === 'live' && (
           <div className="space-y-4">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -579,103 +615,45 @@ const App = () => {
               <div className="divide-y divide-gray-700">
                 {todaysAttendance.map(r => (
                   <div key={r.id} className="p-3 flex justify-between items-center">
-                    <div>
-                      <div className="font-bold">{r.name}</div>
-                      <div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
-                       <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button>
-                    </div>
+                    <div><div className="font-bold">{r.name}</div><div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div></div>
+                    <div className="flex items-center gap-2">{!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}<button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button></div>
                   </div>
                 ))}
               </div>
             </div>
-            {/* ABSENT LIST */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300">Absent</div>
               <div className="divide-y divide-gray-700">
                 {getAbsentStudents().map(s => (
-                  <div key={s.id} className="p-3 text-sm text-gray-400 flex justify-between">
-                    <span>{s.name}</span><span className="text-gray-500 text-xs">{s.grade ? `Gr ${s.grade}` : ''}</span>
-                  </div>
+                  <div key={s.id} className="p-3 text-sm text-gray-400 flex justify-between"><span>{s.name}</span><span className="text-gray-500 text-xs">{s.grade ? `Gr ${s.grade}` : ''}</span></div>
                 ))}
               </div>
             </div>
           </div>
         )}
-
-        {/* HISTORY TAB */}
         {adminTab === 'history' && (
           <div className="space-y-4">
-             {/* Report Builder */}
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="w-5 h-5 text-blue-400" />
-                  <h4 className="text-blue-300 font-bold">Report Builder</h4>
-                </div>
-                
+                <div className="flex items-center gap-2 mb-4"><BarChart3 className="w-5 h-5 text-blue-400" /><h4 className="text-blue-300 font-bold">Report Builder</h4></div>
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Start Date</label>
-                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">End Date</label>
-                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
-                  </div>
+                  <div><label className="text-xs text-gray-400 block mb-1">Start</label><input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} /></div>
+                  <div><label className="text-xs text-gray-400 block mb-1">End</label><input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} /></div>
                 </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Filter by Athlete</label>
-                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStudentFilter} onChange={e => setReportStudentFilter(e.target.value)}>
-                      <option value="">All Athletes</option>
-                      {roster.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Filter by Grade/Group</label>
-                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportGradeFilter} onChange={e => setReportGradeFilter(e.target.value)}>
-                      <option value="">All Grades</option>
-                      {[...new Set(roster.map(s => s.grade).filter(Boolean))].sort().map(g => (
-                        <option key={String(g)} value={String(g)}>Grade {g}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <button onClick={handleGenerateReport} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-2">
-                  <Download className="w-4 h-4" /> Download Report (CSV)
-                </button>
+                <button onClick={handleGenerateReport} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-2"><Download className="w-4 h-4" /> CSV</button>
              </div>
-
              <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300 text-xs uppercase tracking-wider">Recent Activity</div>
+               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300 text-xs uppercase">Recent Activity</div>
                <div className="divide-y divide-gray-700">
                   {historyStats.map((stat, idx) => (
                     <div key={idx} className="flex flex-col border-b border-gray-700/50 last:border-0">
                       <button onClick={() => setExpandedDate(expandedDate === stat.date ? null : stat.date)} className="p-4 flex justify-between items-center w-full hover:bg-gray-700/50">
-                         <div className="flex items-center gap-3">
-                           <Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span>
-                         </div>
-                         <div className="flex items-center gap-2">
-                            <span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>
-                            {expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
-                         </div>
+                         <div className="flex items-center gap-3"><Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span></div>
+                         <div className="flex items-center gap-2"><span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>{expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
                       </button>
                       {expandedDate === stat.date && (
                         <div className="bg-gray-900/50 p-4 border-t border-gray-700">
-                          <button onClick={() => handleCopyForSheets(stat.date)} className="text-xs flex items-center gap-1 text-blue-400 mb-2">
-                            {copiedDate === stat.date ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy for Sheets
-                          </button>
-                          <div className="space-y-1">
-                            {historyRecords.filter(r => r.date === stat.date).map(s => (
-                              <div key={s.id} className="flex justify-between text-sm text-gray-300 border-b border-gray-800 pb-1">
-                                <span>{s.name}</span><span className="font-mono text-gray-500">{s.weight}</span>
-                              </div>
-                            ))}
-                          </div>
+                          <button onClick={() => handleCopyForSheets(stat.date)} className="text-xs flex items-center gap-1 text-blue-400 mb-2">{copiedDate === stat.date ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy</button>
+                          <div className="space-y-1">{historyRecords.filter(r => r.date === stat.date).map(s => (<div key={s.id} className="flex justify-between text-sm text-gray-300 border-b border-gray-800 pb-1"><span>{s.name}</span><span className="font-mono text-gray-500">{s.weight}</span></div>))}</div>
                         </div>
                       )}
                     </div>
@@ -684,12 +662,10 @@ const App = () => {
              </div>
           </div>
         )}
-
-        {/* CONTENT MANAGER TAB */}
         {adminTab === 'content' && (
           <div className="space-y-6">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Post Announcement</h3>
+              <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Announcement</h3>
               <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Message..." value={newAnnouncement} onChange={e => setNewAnnouncement(e.target.value)} />
               <button onClick={handleAddAnnouncement} className="w-full bg-pink-600 py-2 rounded text-sm font-bold">Post</button>
             </div>
@@ -707,8 +683,6 @@ const App = () => {
             </div>
           </div>
         )}
-
-        {/* ROSTER TAB */}
         {adminTab === 'roster' && (
           <div className="space-y-6">
              <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-lg">
@@ -731,17 +705,13 @@ const App = () => {
     );
   }
 
-  // 3. ATHLETE VIEW (Main App)
+  // 3. ATHLETE VIEW
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
-      
-      {/* SUCCESS SCREEN OVERLAY */}
       {checkInSuccess || journalSuccess ? (
         <div className="fixed inset-0 bg-gray-900 z-50 flex items-center justify-center p-6 animate-in zoom-in">
           <div className="bg-gray-800 p-8 rounded-2xl shadow-2xl text-center border border-green-500/30 w-full max-w-sm">
-            <div className="mx-auto bg-green-500/20 w-24 h-24 rounded-full flex items-center justify-center mb-6">
-              <CheckCircle className="w-12 h-12 text-green-400" />
-            </div>
+            <div className="mx-auto bg-green-500/20 w-24 h-24 rounded-full flex items-center justify-center mb-6"><CheckCircle className="w-12 h-12 text-green-400" /></div>
             <h2 className="text-3xl font-bold text-white mb-2">{journalSuccess ? 'Log Saved!' : 'Checked In!'}</h2>
             <p className="text-gray-400">Screen will reset automatically...</p>
             {syncStatus !== 'idle' && !journalSuccess && (
@@ -756,62 +726,36 @@ const App = () => {
         </div>
       ) : (
         <>
-          {/* HEADER */}
           <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg">
             <div className="flex justify-between items-center">
-              <h1 className="text-xl font-extrabold text-white tracking-tight">
-                Lady Bluejays <span className="text-pink-500">Wrestling</span>
-              </h1>
-              <div className="w-8 h-8 bg-pink-900/30 rounded-full flex items-center justify-center border border-pink-800">
-                <Users className="w-4 h-4 text-pink-400" />
-              </div>
+              <h1 className="text-xl font-extrabold text-white tracking-tight">Lady Bluejays <span className="text-pink-500">Wrestling</span></h1>
+              <div className="w-8 h-8 bg-pink-900/30 rounded-full flex items-center justify-center border border-pink-800"><Users className="w-4 h-4 text-pink-400" /></div>
             </div>
           </div>
-
-          {/* MAIN CONTENT AREA */}
           <div className="p-4 max-w-md mx-auto">
             
-            {/* 1. CHECK IN TAB */}
+            {/* 1. CHECK IN */}
             {activeTab === 'checkin' && (
               <div className="animate-in fade-in slide-in-from-bottom-2">
                 <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl mb-6">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <Clock className="w-5 h-5 text-pink-400"/> Daily Check-in
-                  </h2>
-                  
-                  {/* Name Search */}
+                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Clock className="w-5 h-5 text-pink-400"/> Daily Check-in</h2>
                   <div className="relative mb-4">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                      <input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." 
-                        className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" />
-                    </div>
+                    <div className="relative"><Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" /><input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" /></div>
                     {searchTerm && !selectedStudent && (
                       <div className="absolute z-10 w-full bg-gray-700 border border-gray-600 mt-1 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
                         {filteredRoster.map(s => (
-                          <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50">
-                            <span className="font-bold text-white">{s.name}</span>
-                          </div>
+                          <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50"><span className="font-bold text-white">{s.name}</span></div>
                         ))}
                       </div>
                     )}
                   </div>
-
                   {selectedStudent && (
                     <div className="space-y-4">
-                      <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4"/> Checking in as <span className="font-bold">{selectedStudent.name}</span>
-                      </div>
-                      
+                      <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Checking in as <span className="font-bold">{selectedStudent.name}</span></div>
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-1 block">Weight</label>
-                        <div className="relative">
-                          <Scale className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                          <input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0"
-                            className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-xl font-mono" />
-                        </div>
+                        <div className="relative"><Scale className="absolute left-3 top-3 text-gray-500 w-5 h-5" /><input type="number" step="0.1" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-xl font-mono" /></div>
                       </div>
-
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-1 block">Skin Check</label>
                         <div className="flex gap-2">
@@ -819,133 +763,149 @@ const App = () => {
                           <button onClick={() => setSkinCheck(false)} className={`flex-1 py-3 rounded-xl font-bold border transition-colors ${!skinCheck ? 'bg-red-600 border-red-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'}`}>Fail</button>
                         </div>
                       </div>
-
-                      <button onClick={handleCheckIn} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">
-                        {loading ? 'Submitting...' : 'Submit Check-in'}
-                      </button>
+                      <button onClick={handleCheckIn} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">{loading ? 'Submitting...' : 'Submit Check-in'}</button>
                     </div>
                   )}
                 </div>
-
-                {/* Announcements Feed (Small) */}
                 <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                   <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2"><Megaphone className="w-4 h-4 text-yellow-500"/> Recent News</h3>
-                  {announcements.length === 0 && <div className="text-gray-500 text-sm">No announcements yet.</div>}
                   <div className="space-y-3">
                     {announcements.slice(0,2).map(a => (
-                      <div key={a.id} className="text-sm border-l-2 border-yellow-500 pl-3">
-                        <div className="text-gray-200">{a.message}</div>
-                        <div className="text-xs text-gray-500 mt-1">{a.date}</div>
-                      </div>
+                      <div key={a.id} className="text-sm border-l-2 border-yellow-500 pl-3"><div className="text-gray-200">{a.message}</div><div className="text-xs text-gray-500 mt-1">{a.date}</div></div>
                     ))}
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 2. JOURNAL TAB (NEW) */}
+            {/* 2. FOCUS TAB */}
+            {activeTab === 'focus' && (
+              <div className="animate-in fade-in slide-in-from-bottom-2 h-full flex flex-col">
+                {!selectedStudent ? (
+                   <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl text-center mb-4">
+                      <Target className="w-12 h-12 text-pink-400 mx-auto mb-4"/>
+                      <h2 className="text-xl font-bold text-white mb-2">Mental Focus Drill</h2>
+                      <p className="text-gray-400 text-sm mb-6">Select your name to begin the session.</p>
+                      <div className="relative text-left">
+                        <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
+                        <input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" />
+                      </div>
+                      {searchTerm && (
+                        <div className="absolute z-10 w-full bg-gray-700 border border-gray-600 mt-1 rounded-xl shadow-2xl max-h-60 overflow-y-auto text-left">
+                          {filteredRoster.map(s => (
+                            <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50"><span className="font-bold text-white">{s.name}</span></div>
+                          ))}
+                        </div>
+                      )}
+                   </div>
+                ) : (
+                   <div className="flex-1 flex flex-col">
+                      {focusState === 'idle' && (
+                        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 text-center m-auto">
+                           <Target className="w-16 h-16 text-pink-500 mx-auto mb-4 animate-pulse"/>
+                           <h2 className="text-2xl font-extrabold text-white mb-2">2 Minutes of Focus</h2>
+                           <p className="text-pink-400 font-bold mb-6 uppercase tracking-widest">First Period</p>
+                           <p className="text-gray-400 text-sm mb-8 max-w-xs mx-auto">
+                             Find numbers 00-99 in order. Speed and accuracy are key.
+                           </p>
+                           <button onClick={startFocusGame} className="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-xl text-xl shadow-lg shadow-green-900/20 flex items-center gap-3 mx-auto">
+                             <Play className="w-6 h-6 fill-current"/> Start Timer
+                           </button>
+                           <button onClick={() => setSelectedStudent(null)} className="mt-8 text-gray-500 text-xs underline">Change Athlete</button>
+                        </div>
+                      )}
+                      {focusState === 'playing' && (
+                        <div className="flex flex-col h-full">
+                          <div className="flex justify-between items-center mb-4 px-2">
+                             <div><div className="text-xs text-gray-500 uppercase font-bold">Next Number</div><div className="text-3xl font-black text-white">{focusNextNumber}</div></div>
+                             <div className={`text-4xl font-mono font-bold ${focusTimeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-pink-500'}`}>
+                               {Math.floor(focusTimeLeft / 60)}:{(focusTimeLeft % 60).toString().padStart(2, '0')}
+                             </div>
+                          </div>
+                          <div className="grid grid-cols-10 gap-1 flex-1 content-start">
+                            {focusGrid.map((num) => (
+                              <button key={num} onTouchStart={(e) => { e.preventDefault(); handleGridClick(num); }} onClick={() => handleGridClick(num)} className={`aspect-square flex items-center justify-center text-[10px] sm:text-xs font-bold rounded transition-all duration-75 select-none ${num < focusNextNumber ? 'bg-green-600 text-white opacity-30' : 'bg-gray-800 text-gray-300 active:bg-pink-600 active:text-white'}`}>{num}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {focusState === 'finished' && (
+                        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 text-center m-auto animate-in zoom-in">
+                           <div className="mx-auto bg-blue-900/30 w-24 h-24 rounded-full flex items-center justify-center mb-6 border-4 border-blue-500/50">
+                              <span className="text-4xl font-black text-white">{focusScore}</span>
+                           </div>
+                           <h2 className="text-2xl font-bold text-white mb-2">Time's Up!</h2>
+                           <p className="text-gray-400 mb-8">Focus Score Recorded</p>
+                           <div className="flex gap-3 justify-center">
+                             <button onClick={startFocusGame} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center gap-2"><RotateCcw className="w-4 h-4"/> Retry</button>
+                             <button onClick={() => { setFocusState('idle'); setSelectedStudent(null); }} className="bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 px-6 rounded-lg">Finish</button>
+                           </div>
+                        </div>
+                      )}
+                   </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. JOURNAL TAB */}
             {activeTab === 'journal' && (
               <div className="animate-in fade-in slide-in-from-bottom-2">
                 <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                    <BookOpen className="w-5 h-5 text-pink-400"/> Wrestling Mindset
-                  </h2>
-
-                  {/* Name Search (If not already selected) */}
+                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-400"/> Wrestling Mindset</h2>
                   {!selectedStudent ? (
                     <div className="relative mb-6">
-                      <div className="relative">
-                        <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                        <input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." 
-                          className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" />
-                      </div>
+                      <div className="relative"><Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" /><input type="text" value={searchTerm} onChange={handleSearch} placeholder="Find your name..." className="w-full bg-gray-900 border border-gray-600 text-white pl-10 pr-4 py-3 rounded-xl focus:ring-2 focus:ring-pink-500 outline-none text-lg" /></div>
                       {searchTerm && (
                         <div className="absolute z-10 w-full bg-gray-700 border border-gray-600 mt-1 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
                           {filteredRoster.map(s => (
-                            <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50">
-                              <span className="font-bold text-white">{s.name}</span>
-                            </div>
+                            <div key={s.id} onClick={() => { setSelectedStudent(s); setSearchTerm(s.name || ""); }} className="p-3 hover:bg-pink-600/20 cursor-pointer border-b border-gray-600/50"><span className="font-bold text-white">{s.name}</span></div>
                           ))}
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="space-y-6">
-                      <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex justify-between items-center">
-                        <span className="flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Log for: <b>{selectedStudent.name}</b></span>
-                        <button onClick={() => setSelectedStudent(null)} className="text-xs underline">Change</button>
-                      </div>
-
-                      {/* Gratitude */}
+                      <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex justify-between items-center"><span className="flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Log for: <b>{selectedStudent.name}</b></span><button onClick={() => setSelectedStudent(null)} className="text-xs underline">Change</button></div>
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Daily Gratitude</label>
-                        <textarea 
-                          className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20"
-                          placeholder="I am grateful for..."
-                          value={journalGratitude}
-                          onChange={(e) => setJournalGratitude(e.target.value)}
-                        />
+                        <textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20" placeholder="I am grateful for..." value={journalGratitude} onChange={(e) => setJournalGratitude(e.target.value)}/>
                       </div>
-
-                      {/* Focus Word */}
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Today's Focus Word</label>
                         <div className="flex flex-wrap gap-2">
                           {['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => (
-                            <button
-                              key={word}
-                              onClick={() => setFocusWord(word)}
-                              className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${focusWord === word ? 'bg-pink-600 border-pink-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'}`}
-                            >
-                              {word}
-                            </button>
+                            <button key={word} onClick={() => setFocusWord(word)} className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${focusWord === word ? 'bg-pink-600 border-pink-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'}`}>{word}</button>
                           ))}
                         </div>
                       </div>
-
-                      {/* Focus Statement */}
                       {focusWord && (
                         <div className="animate-in fade-in">
                           <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Statement</label>
-                          <textarea 
-                            className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20"
-                            placeholder={`How will you be ${focusWord.toLowerCase()} today?`}
-                            value={focusStatement}
-                            onChange={(e) => setFocusStatement(e.target.value)}
-                          />
+                          <textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm focus:ring-2 focus:ring-pink-500 outline-none h-20" placeholder={`How will you be ${focusWord.toLowerCase()} today?`} value={focusStatement} onChange={(e) => setFocusStatement(e.target.value)}/>
                         </div>
                       )}
-
-                      {/* Wellness Check */}
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Battery className="w-3 h-3"/> Energy Level</label>
                           <div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">
-                            {[1, 2, 3, 4, 5].map(lvl => (
-                              <button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>
-                            ))}
+                            {[1, 2, 3, 4, 5].map(lvl => (<button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>))}
                           </div>
                         </div>
                         <div>
                           <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Smile className="w-3 h-3"/> Mood</label>
                           <div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">
-                            {[1, 2, 3, 4, 5].map(lvl => (
-                              <button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>
-                            ))}
+                            {[1, 2, 3, 4, 5].map(lvl => (<button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>))}
                           </div>
                         </div>
                       </div>
-
-                      <button onClick={handleJournalSubmit} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">
-                        {loading ? 'Saving...' : 'Submit Daily Log'}
-                      </button>
+                      <button onClick={handleJournalSubmit} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">{loading ? 'Saving...' : 'Submit Daily Log'}</button>
                     </div>
                   )}
                 </div>
               </div>
             )}
 
-            {/* 3. VIDEOS TAB */}
+            {/* 4. RESOURCES TAB */}
             {activeTab === 'resources' && (
               <div className="space-y-4 animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">Training Videos</h2>
@@ -954,68 +914,44 @@ const App = () => {
                   <div key={vid.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
                     <div className="p-4">
                       <h3 className="font-bold text-white text-lg mb-1">{vid.title}</h3>
-                      <a href={vid.url} target="_blank" rel="noreferrer" className="text-pink-400 text-sm flex items-center gap-1 hover:underline">
-                        <Youtube className="w-4 h-4" /> Watch on YouTube
-                      </a>
+                      <a href={vid.url} target="_blank" rel="noreferrer" className="text-pink-400 text-sm flex items-center gap-1 hover:underline"><Youtube className="w-4 h-4" /> Watch on YouTube</a>
                     </div>
                   </div>
                 ))}
               </div>
             )}
 
-            {/* 4. CALENDAR TAB */}
+            {/* 5. CALENDAR TAB */}
             {activeTab === 'calendar' && (
               <div className="space-y-3 animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">Season Schedule</h2>
-                
                 {GOOGLE_CALENDAR_ID ? (
                   <div className="space-y-4">
                     <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 p-1">
-                      <iframe 
-                        src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&theme=DARK`} 
-                        style={{border: 0, width: "100%", height: "400px"}} 
-                        frameBorder="0" 
-                        scrolling="no"
-                      ></iframe>
+                      <iframe src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&theme=DARK`} style={{border: 0, width: "100%", height: "400px"}} frameBorder="0" scrolling="no"></iframe>
                     </div>
-                    <a 
-                      href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(GOOGLE_CALENDAR_ID)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block w-full text-center bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all"
-                    >
-                      + Add to My Calendar
-                    </a>
+                    <a href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(GOOGLE_CALENDAR_ID)}`} target="_blank" rel="noreferrer" className="block w-full text-center bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all">+ Add to My Calendar</a>
                   </div>
-                ) : (
-                  <div className="text-center text-gray-500 py-10 bg-gray-800 rounded-xl border border-gray-700">
-                    <Calendar className="w-12 h-12 mx-auto mb-2 opacity-20"/>
-                    <p>Calendar not linked yet.</p>
-                  </div>
-                )}
+                ) : <div className="text-center text-gray-500 py-10 bg-gray-800 rounded-xl border border-gray-700"><Calendar className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>Calendar not linked yet.</p></div>}
               </div>
             )}
 
-            {/* 5. STATS TAB */}
+            {/* 6. STATS TAB */}
             {activeTab === 'stats' && (
               <div className="animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">My Weight Tracker</h2>
-                
                 {!statsStudent ? (
                   <div className="bg-gray-800 p-6 rounded-xl border border-gray-700 text-center">
                     <Scale className="w-12 h-12 text-gray-600 mx-auto mb-4"/>
                     <p className="text-gray-400 mb-4">Select your name to view your history.</p>
                     <div className="relative">
                       <Search className="absolute left-3 top-3 text-gray-500 w-5 h-5" />
-                      <input type="text" onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search name..." 
-                        className="w-full bg-gray-900 border border-gray-600 text-white pl-10 p-3 rounded-xl" />
+                      <input type="text" onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search name..." className="w-full bg-gray-900 border border-gray-600 text-white pl-10 p-3 rounded-xl" />
                     </div>
                     {searchTerm && (
                       <div className="mt-2 text-left bg-gray-700 rounded-xl overflow-hidden">
                         {filteredRoster.slice(0,5).map(s => (
-                          <div key={s.id} onClick={() => loadStudentStats(s)} className="p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 text-white">
-                            {s.name}
-                          </div>
+                          <div key={s.id} onClick={() => loadStudentStats(s)} className="p-3 hover:bg-gray-600 cursor-pointer border-b border-gray-600 text-white">{s.name}</div>
                         ))}
                       </div>
                     )}
@@ -1043,26 +979,24 @@ const App = () => {
           </div>
 
           {/* BOTTOM NAVIGATION */}
-          <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-2 flex justify-around items-center z-40">
-            <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <CheckCircle className="w-5 h-5" />
-              <span className="text-[9px] mt-1 font-bold">Check In</span>
+          <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40">
+            <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <CheckCircle className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Check In</span>
             </button>
-            <button onClick={() => setActiveTab('journal')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'journal' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <BookOpen className="w-5 h-5" />
-              <span className="text-[9px] mt-1 font-bold">Mindset</span>
+            <button onClick={() => setActiveTab('focus')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'focus' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <Target className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Focus</span>
             </button>
-            <button onClick={() => setActiveTab('resources')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'resources' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <Video className="w-5 h-5" />
-              <span className="text-[9px] mt-1 font-bold">Videos</span>
+            <button onClick={() => setActiveTab('journal')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'journal' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <BookOpen className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Mindset</span>
             </button>
-            <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'calendar' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <Calendar className="w-5 h-5" />
-              <span className="text-[9px] mt-1 font-bold">Schedule</span>
+            <button onClick={() => setActiveTab('resources')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'resources' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <Video className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Videos</span>
             </button>
-            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center p-2 min-w-[60px] ${activeTab === 'stats' ? 'text-pink-500' : 'text-gray-500'}`}>
-              <TrendingUp className="w-5 h-5" />
-              <span className="text-[9px] mt-1 font-bold">Stats</span>
+            <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'calendar' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <Calendar className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Schedule</span>
+            </button>
+            <button onClick={() => setActiveTab('stats')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'stats' ? 'text-pink-500' : 'text-gray-500'}`}>
+              <TrendingUp className="w-5 h-5" /><span className="text-[8px] mt-1 font-bold uppercase">Stats</span>
             </button>
           </div>
           
