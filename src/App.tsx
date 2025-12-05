@@ -10,8 +10,9 @@ import {
   ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound, Mail
 } from 'lucide-react';
 
-// --- CONFIGURATION (HARDCODED TO FIX BUILD ERROR) ---
+// --- CONFIGURATION ---
 
+// Hardcoded keys to ensure it works in your current environment
 const firebaseConfig = {
   apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
   authDomain: "girls-wrestling-attendance.firebaseapp.com",
@@ -22,20 +23,16 @@ const firebaseConfig = {
   measurementId: "G-CVY2FGY8L2"
 };
 
-// URLs and Secrets directly in code to bypass ES2015 build restriction
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
-const COACH_PASSWORD = "bluejays";
-
-// Allowed domains for student registration
-const ALLOWED_DOMAINS = ["@mapsedu.org", "@maps.k12.wi.us"];
+const COACH_PASSWORD = "bluejays"; // Change this if you want a harder password
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// --- PRELOADED DATA (Optional backup list) ---
+// --- PRELOADED DATA ---
 const PRELOADED_ROSTER = [];
 
 const App = () => {
@@ -90,13 +87,19 @@ const App = () => {
   const [todaysAttendance, setTodaysAttendance] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any[]>([]);
+  
+  // COACH AUTHENTICATION STATE
+  // We default this to false so no one sees admin data by default
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [coachPassInput, setCoachPassInput] = useState('');
+  
   const [csvData, setCsvData] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [copiedDate, setCopiedDate] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState('');
+  
+  // Error Handling State
   const [permissionError, setPermissionError] = useState(false);
   
   // Report Filters
@@ -173,7 +176,7 @@ const App = () => {
 
   // Admin Data Fetch
   useEffect(() => {
-    if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
+    if (isCoachAuthenticated) {
       const fetchAdminData = async () => {
         try {
           const today = new Date().toLocaleDateString();
@@ -187,7 +190,7 @@ const App = () => {
       fetchAdminData();
       if(adminTab === 'history') fetchHistory();
     }
-  }, [appMode, isCoachAuthenticated, adminTab, user]);
+  }, [isCoachAuthenticated, adminTab]);
 
   const fetchHistory = async () => {
     try {
@@ -227,6 +230,7 @@ const App = () => {
   }, [roster]);
 
   // --- FOCUS GAME LOGIC ---
+  
   useEffect(() => {
     let timer: any;
     if (focusState === 'playing' && focusTimeLeft > 0) {
@@ -314,8 +318,10 @@ const App = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
-    const isValidDomain = ALLOWED_DOMAINS.some(domain => emailInput.toLowerCase().endsWith(domain));
-    if (!isValidDomain) { setError(`Please use your official school email (${ALLOWED_DOMAINS[0]}).`); setLoading(false); return; }
+    
+    // REMOVED: Domain Restriction Check
+    // if (!isValidDomain) { ... }
+
     if (passwordInput.length < 6) { setError("Password must be at least 6 characters."); setLoading(false); return; }
     if (passwordInput !== confirmPassword) { setError("Passwords do not match."); setLoading(false); return; }
 
@@ -427,10 +433,15 @@ const App = () => {
     } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
   };
 
+  // *** COACH LOGIN CHECK ***
   const unlockCoach = (e: React.FormEvent) => {
     e.preventDefault();
-    if(passwordInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setPasswordInput(''); } 
-    else { alert('Wrong Password'); }
+    if(passwordInput === COACH_PASSWORD) { 
+      setIsCoachAuthenticated(true); 
+      setPasswordInput(''); 
+    } else { 
+      alert('Wrong Password'); 
+    }
   };
 
   const handleDeleteCheckIn = async (id: string, name: string) => {
@@ -620,7 +631,8 @@ const App = () => {
     );
   }
 
-  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) {
+  // 1. COACH LOGIN SCREEN
+  if (appMode === 'coach' && !isCoachAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
         <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center">
@@ -637,19 +649,25 @@ const App = () => {
     );
   }
 
-  // COACH DASHBOARD
-  if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
+  // 2. COACH DASHBOARD
+  if (isCoachAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-xl font-bold">Coach Dashboard</h1>
-          <button onClick={handleLogout} className="text-xs bg-red-900/50 px-3 py-1 rounded">Logout</button>
+          <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); }} className="text-xs bg-red-900/50 px-3 py-1 rounded">Exit</button>
         </div>
+
+        {/* Admin Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {['live', 'content', 'history', 'roster'].map(t => (
-            <button key={t} onClick={() => setAdminTab(t)} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${adminTab === t ? 'bg-pink-600' : 'bg-gray-800 text-gray-400'}`}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
+            <button key={t} onClick={() => setAdminTab(t)} 
+              className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${adminTab === t ? 'bg-pink-600' : 'bg-gray-800 text-gray-400'}`}>
+              {t.charAt(0).toUpperCase() + t.slice(1)}
+            </button>
           ))}
         </div>
+
         {/* LIVE TAB */}
         {adminTab === 'live' && (
           <div className="space-y-4">
@@ -662,46 +680,103 @@ const App = () => {
               <div className="divide-y divide-gray-700">
                 {todaysAttendance.map(r => (
                   <div key={r.id} className="p-3 flex justify-between items-center">
-                    <div><div className="font-bold">{r.name}</div><div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div></div>
-                    <div className="flex items-center gap-2">{!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}<button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button></div>
+                    <div>
+                      <div className="font-bold">{r.name}</div>
+                      <div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                       {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
+                       <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+            {/* ABSENT LIST */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300">Absent</div>
               <div className="divide-y divide-gray-700">
                 {getAbsentStudents().map(s => (
-                  <div key={s.id} className="p-3 text-sm text-gray-400 flex justify-between"><span>{s.name}</span><span className="text-gray-500 text-xs">{s.grade ? `Gr ${s.grade}` : ''}</span></div>
+                  <div key={s.id} className="p-3 text-sm text-gray-400 flex justify-between">
+                    <span>{s.name}</span><span className="text-gray-500 text-xs">{s.grade ? `Gr ${s.grade}` : ''}</span>
+                  </div>
                 ))}
               </div>
             </div>
           </div>
         )}
+
         {/* HISTORY TAB */}
         {adminTab === 'history' && (
           <div className="space-y-4">
+             {/* Report Builder */}
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-4"><BarChart3 className="w-5 h-5 text-blue-400" /><h4 className="text-blue-300 font-bold">Report Builder</h4></div>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div><label className="text-xs text-gray-400 block mb-1">Start</label><input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} /></div>
-                  <div><label className="text-xs text-gray-400 block mb-1">End</label><input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} /></div>
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 className="w-5 h-5 text-blue-400" />
+                  <h4 className="text-blue-300 font-bold">Report Builder</h4>
                 </div>
-                <button onClick={handleGenerateReport} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-2"><Download className="w-4 h-4" /> CSV</button>
+                
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Start Date</label>
+                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">End Date</label>
+                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 mb-4">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Filter by Athlete</label>
+                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStudentFilter} onChange={e => setReportStudentFilter(e.target.value)}>
+                      <option value="">All Athletes</option>
+                      {roster.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Filter by Grade/Group</label>
+                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportGradeFilter} onChange={e => setReportGradeFilter(e.target.value)}>
+                      <option value="">All Grades</option>
+                      {[...new Set(roster.map(s => s.grade).filter(Boolean))].sort().map(g => (
+                        <option key={String(g)} value={String(g)}>Grade {g}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <button onClick={handleGenerateReport} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-2">
+                  <Download className="w-4 h-4" /> Download Report (CSV)
+                </button>
              </div>
+
              <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300 text-xs uppercase">Recent Activity</div>
+               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300 text-xs uppercase tracking-wider">Recent Activity</div>
                <div className="divide-y divide-gray-700">
                   {historyStats.map((stat, idx) => (
                     <div key={idx} className="flex flex-col border-b border-gray-700/50 last:border-0">
                       <button onClick={() => setExpandedDate(expandedDate === stat.date ? null : stat.date)} className="p-4 flex justify-between items-center w-full hover:bg-gray-700/50">
-                         <div className="flex items-center gap-3"><Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span></div>
-                         <div className="flex items-center gap-2"><span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>{expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
+                         <div className="flex items-center gap-3">
+                           <Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span>
+                         </div>
+                         <div className="flex items-center gap-2">
+                            <span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>
+                            {expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                         </div>
                       </button>
                       {expandedDate === stat.date && (
                         <div className="bg-gray-900/50 p-4 border-t border-gray-700">
-                          <button onClick={() => handleCopyForSheets(stat.date)} className="text-xs flex items-center gap-1 text-blue-400 mb-2">{copiedDate === stat.date ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy</button>
-                          <div className="space-y-1">{historyRecords.filter(r => r.date === stat.date).map(s => (<div key={s.id} className="flex justify-between text-sm text-gray-300 border-b border-gray-800 pb-1"><span>{s.name}</span><span className="font-mono text-gray-500">{s.weight}</span></div>))}</div>
+                          <button onClick={() => handleCopyForSheets(stat.date)} className="text-xs flex items-center gap-1 text-blue-400 mb-2">
+                            {copiedDate === stat.date ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy for Sheets
+                          </button>
+                          <div className="space-y-1">
+                            {historyRecords.filter(r => r.date === stat.date).map(s => (
+                              <div key={s.id} className="flex justify-between text-sm text-gray-300 border-b border-gray-800 pb-1">
+                                <span>{s.name}</span><span className="font-mono text-gray-500">{s.weight}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                     </div>
@@ -710,11 +785,12 @@ const App = () => {
              </div>
           </div>
         )}
-        {/* CONTENT TAB */}
+
+        {/* CONTENT MANAGER TAB */}
         {adminTab === 'content' && (
           <div className="space-y-6">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Announcement</h3>
+              <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Post Announcement</h3>
               <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Message..." value={newAnnouncement} onChange={e => setNewAnnouncement(e.target.value)} />
               <button onClick={handleAddAnnouncement} className="w-full bg-pink-600 py-2 rounded text-sm font-bold">Post</button>
             </div>
@@ -724,6 +800,7 @@ const App = () => {
               <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="URL" value={newVideoURL} onChange={e => setNewVideoURL(e.target.value)} />
               <button onClick={handleAddVideo} className="w-full bg-green-600 py-2 rounded text-sm font-bold">Add Video</button>
             </div>
+            {/* Calendar Info */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
               <h3 className="font-bold flex items-center gap-2 mb-2"><Calendar className="w-4 h-4 text-purple-400"/> Calendar</h3>
               <p className="text-xs text-gray-400 mb-2">ID: <span className="font-mono text-white">{GOOGLE_CALENDAR_ID || "Not Set"}</span></p>
@@ -731,6 +808,7 @@ const App = () => {
             </div>
           </div>
         )}
+
         {/* ROSTER TAB */}
         {adminTab === 'roster' && (
           <div className="space-y-6">
@@ -781,8 +859,8 @@ const App = () => {
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
               <h2 className="text-white font-bold text-lg">Create Account</h2>
-              <div className="bg-blue-900/20 p-3 rounded border border-blue-800 text-xs text-blue-200">Must use official school email ({ALLOWED_DOMAINS[0]})</div>
-              <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="lakeyn.adams@mapsedu.org" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
+              {/* Removed Email Domain Warning Banner */}
+              <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="your.email@example.com" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
               <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password (min 6 chars)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
               <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
               {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
@@ -792,16 +870,20 @@ const App = () => {
           )}
 
           <div className="mt-8 pt-8 border-t border-gray-700">
-             <button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button>
+             <button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full">
+               <Lock className="w-3 h-3"/> Coach Admin
+             </button>
           </div>
         </div>
+        
+        {/* Coach Login Overlay (Only visible if not logged in as user and clicked admin button) */}
         {isCoachAuthenticated && !user?.email && (
              <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
                  <div className="bg-gray-800 p-8 rounded-xl w-full max-w-sm relative">
                     <button onClick={() => { setIsCoachAuthenticated(false); }} className="absolute top-4 right-4 text-gray-400"><XCircle/></button>
                     <h2 className="text-xl font-bold text-white mb-4">Coach Password</h2>
                     <input type="password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4" placeholder="••••••••" value={coachPassInput} onChange={e => setCoachPassInput(e.target.value)} autoFocus />
-                    <button onClick={() => { if(coachPassInput === COACH_PASSWORD) { setUser({isCoach: true}); setCoachPassInput(''); } else alert('Wrong'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Access</button>
+                    <button onClick={() => { if(coachPassInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setCoachPassInput(''); } else alert('Wrong'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Access</button>
                  </div>
              </div>
         )}
