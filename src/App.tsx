@@ -7,12 +7,12 @@ import {
   Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, Unlock, 
   History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
-  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound, Mail
+  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound, Mail,
+  Utensils, Droplets, Swords
 } from 'lucide-react';
 
-// --- CONFIGURATION ---
+// --- CONFIGURATION (HARDCODED TO FIX BUILD ERROR) ---
 
-// Hardcoded keys to ensure it works in your current environment
 const firebaseConfig = {
   apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
   authDomain: "girls-wrestling-attendance.firebaseapp.com",
@@ -23,9 +23,12 @@ const firebaseConfig = {
   measurementId: "G-CVY2FGY8L2"
 };
 
+// Hardcoded URLs to ensure compatibility with the build environment
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
-const COACH_PASSWORD = "bluejays"; // Change this if you want a harder password
+const COACH_PASSWORD = "bluejays";
+
+const ALLOWED_DOMAINS = ["@mapsedu.org", "@maps.k12.wi.us"];
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -63,10 +66,15 @@ const App = () => {
   const [checkInSuccess, setCheckInSuccess] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
 
-  // Journal State
+  // Journal State (Expanded)
   const [journalGratitude, setJournalGratitude] = useState('');
   const [focusWord, setFocusWord] = useState('');
   const [focusStatement, setFocusStatement] = useState('');
+  const [dailyMantra, setDailyMantra] = useState('');
+  const [techFocus, setTechFocus] = useState('');
+  const [nutritionVeggies, setNutritionVeggies] = useState(false);
+  const [nutritionFruit, setNutritionFruit] = useState(false);
+  const [nutritionWater, setNutritionWater] = useState(0);
   const [energyLevel, setEnergyLevel] = useState(3);
   const [moodLevel, setMoodLevel] = useState(3);
   const [journalSuccess, setJournalSuccess] = useState(false);
@@ -87,19 +95,13 @@ const App = () => {
   const [todaysAttendance, setTodaysAttendance] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any[]>([]);
-  
-  // COACH AUTHENTICATION STATE
-  // We default this to false so no one sees admin data by default
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
   const [coachPassInput, setCoachPassInput] = useState('');
-  
   const [csvData, setCsvData] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [copiedDate, setCopiedDate] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState('');
-  
-  // Error Handling State
   const [permissionError, setPermissionError] = useState(false);
   
   // Report Filters
@@ -176,7 +178,7 @@ const App = () => {
 
   // Admin Data Fetch
   useEffect(() => {
-    if (isCoachAuthenticated) {
+    if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
       const fetchAdminData = async () => {
         try {
           const today = new Date().toLocaleDateString();
@@ -190,7 +192,15 @@ const App = () => {
       fetchAdminData();
       if(adminTab === 'history') fetchHistory();
     }
-  }, [isCoachAuthenticated, adminTab]);
+  }, [appMode, isCoachAuthenticated, adminTab, user]);
+
+  // SECURITY FIX: Lock Coach Mode when leaving
+  useEffect(() => {
+    if (appMode === 'athlete') {
+      setIsCoachAuthenticated(false);
+      setPasswordInput('');
+    }
+  }, [appMode]);
 
   const fetchHistory = async () => {
     try {
@@ -230,7 +240,6 @@ const App = () => {
   }, [roster]);
 
   // --- FOCUS GAME LOGIC ---
-  
   useEffect(() => {
     let timer: any;
     if (focusState === 'playing' && focusTimeLeft > 0) {
@@ -318,10 +327,7 @@ const App = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
-    
-    // REMOVED: Domain Restriction Check
-    // if (!isValidDomain) { ... }
-
+    // Removed domain restriction per request - open registration
     if (passwordInput.length < 6) { setError("Password must be at least 6 characters."); setLoading(false); return; }
     if (passwordInput !== confirmPassword) { setError("Passwords do not match."); setLoading(false); return; }
 
@@ -393,8 +399,19 @@ const App = () => {
     setLoading(true);
 
     const data = {
-      studentId: selectedStudent.id, name: selectedStudent.name, gratitude: journalGratitude, focusWord, focusStatement,
-      energy: energyLevel, mood: moodLevel, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString(), type: 'journal'
+      studentId: selectedStudent.id, 
+      name: selectedStudent.name, 
+      gratitude: journalGratitude, 
+      focusWord, 
+      focusStatement,
+      mantra: dailyMantra,
+      techFocus,
+      nutrition: { veggies: nutritionVeggies, fruit: nutritionFruit, water: nutritionWater },
+      energy: energyLevel, 
+      mood: moodLevel, 
+      timestamp: new Date().toISOString(), 
+      date: new Date().toLocaleDateString(), 
+      type: 'journal'
     };
 
     try {
@@ -405,7 +422,7 @@ const App = () => {
       }
       setJournalSuccess(true);
       setTimeout(() => { 
-          setJournalSuccess(false); setJournalGratitude(''); setFocusWord(''); setFocusStatement(''); setEnergyLevel(3); setMoodLevel(3); setSearchTerm(''); setSelectedStudent(null);
+          setJournalSuccess(false); setJournalGratitude(''); setFocusWord(''); setFocusStatement(''); setDailyMantra(''); setTechFocus(''); setEnergyLevel(3); setMoodLevel(3); setNutritionVeggies(false); setNutritionFruit(false); setNutritionWater(0); setSearchTerm(''); setSelectedStudent(null);
       }, 2500);
     } catch (err) { setError("Failed to save journal."); } finally { setLoading(false); }
   };
@@ -433,7 +450,6 @@ const App = () => {
     } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
   };
 
-  // *** COACH LOGIN CHECK ***
   const unlockCoach = (e: React.FormEvent) => {
     e.preventDefault();
     if(passwordInput === COACH_PASSWORD) { 
@@ -631,8 +647,7 @@ const App = () => {
     );
   }
 
-  // 1. COACH LOGIN SCREEN
-  if (appMode === 'coach' && !isCoachAuthenticated) {
+  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
         <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center">
@@ -649,8 +664,7 @@ const App = () => {
     );
   }
 
-  // 2. COACH DASHBOARD
-  if (isCoachAuthenticated) {
+  if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
         <div className="flex justify-between items-center mb-6">
@@ -875,8 +889,7 @@ const App = () => {
              </button>
           </div>
         </div>
-        
-        {/* Coach Login Overlay (Only visible if not logged in as user and clicked admin button) */}
+        {/* Coach Login Overlay */}
         {isCoachAuthenticated && !user?.email && (
              <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
                  <div className="bg-gray-800 p-8 rounded-xl w-full max-w-sm relative">
@@ -926,16 +939,65 @@ const App = () => {
          {activeTab === 'journal' && (
             <div className="animate-in fade-in">
                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-400"/> Mindset</h2>
+                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-400"/> Mindset & Nutrition</h2>
                   {currentStudent ? (
                     <div className="space-y-6">
+                      {/* NUTRITION SECTION */}
+                      <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
+                        <h3 className="text-gray-300 text-xs font-bold uppercase mb-3 flex items-center gap-2"><Utensils className="w-3 h-3 text-green-400"/> Daily Fuel</h3>
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                           <div>
+                             <label className="text-xs text-gray-400 block mb-1">Vegetables?</label>
+                             <div className="flex gap-1">
+                               <button onClick={() => setNutritionVeggies(true)} className={`flex-1 py-2 rounded text-xs font-bold ${nutritionVeggies ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'}`}>Yes</button>
+                               <button onClick={() => setNutritionVeggies(false)} className={`flex-1 py-2 rounded text-xs font-bold ${!nutritionVeggies ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500'}`}>No</button>
+                             </div>
+                           </div>
+                           <div>
+                             <label className="text-xs text-gray-400 block mb-1">Fruit?</label>
+                             <div className="flex gap-1">
+                               <button onClick={() => setNutritionFruit(true)} className={`flex-1 py-2 rounded text-xs font-bold ${nutritionFruit ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'}`}>Yes</button>
+                               <button onClick={() => setNutritionFruit(false)} className={`flex-1 py-2 rounded text-xs font-bold ${!nutritionFruit ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500'}`}>No</button>
+                             </div>
+                           </div>
+                        </div>
+                        <div>
+                           <label className="text-xs text-gray-400 block mb-2 flex items-center gap-1"><Droplets className="w-3 h-3 text-blue-400"/> Water Intake (Bottles)</label>
+                           <div className="flex items-center justify-between bg-gray-800 rounded-lg p-2">
+                              <button onClick={() => setNutritionWater(Math.max(0, nutritionWater-1))} className="w-8 h-8 bg-gray-700 rounded text-white font-bold">-</button>
+                              <span className="text-xl font-mono font-bold text-blue-400">{nutritionWater}</span>
+                              <button onClick={() => setNutritionWater(nutritionWater+1)} className="w-8 h-8 bg-gray-700 rounded text-white font-bold">+</button>
+                           </div>
+                        </div>
+                      </div>
+
+                      {/* MINDSET SECTION */}
                       <div><label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Daily Gratitude</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm h-20" placeholder="I am grateful for..." value={journalGratitude} onChange={(e) => setJournalGratitude(e.target.value)}/></div>
-                      <div><label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Word</label><div className="flex flex-wrap gap-2">{['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => <button key={word} onClick={() => setFocusWord(word)} className={`px-3 py-2 rounded-lg text-xs font-bold border ${focusWord === word ? 'bg-pink-600 border-pink-500' : 'bg-gray-700 border-gray-600'}`}>{word}</button>)}</div></div>
-                      {focusWord && <div><label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Statement</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm h-20" placeholder={`How will you be ${focusWord.toLowerCase()} today?`} value={focusStatement} onChange={(e) => setFocusStatement(e.target.value)}/></div>}
+                      <div>
+                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Word</label>
+                        <div className="flex flex-wrap gap-2">{['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => <button key={word} onClick={() => setFocusWord(word)} className={`px-3 py-2 rounded-lg text-xs font-bold border ${focusWord === word ? 'bg-pink-600 border-pink-500' : 'bg-gray-700 border-gray-600'}`}>{word}</button>)}</div>
+                      </div>
+                      
+                      {/* TECHNICAL FOCUS */}
+                      <div>
+                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Swords className="w-3 h-3"/> Position of the Day</label>
+                        <select className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-500" value={techFocus} onChange={(e) => setTechFocus(e.target.value)}>
+                          <option value="">Select Focus...</option>
+                          {['Neutral', 'Top', 'Bottom', 'Takedowns', 'Escapes', 'Pinning', 'Defense', 'Scramble', 'Conditioning'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">My Mantra</label>
+                        <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm" placeholder="e.g. I am unstoppable." value={dailyMantra} onChange={(e) => setDailyMantra(e.target.value)}/>
+                      </div>
+
+                      {/* WELLNESS */}
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Battery className="w-3 h-3"/> Energy</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
                         <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Smile className="w-3 h-3"/> Mood</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
                       </div>
+
                       <button onClick={() => { setSelectedStudent(currentStudent); handleJournalSubmit({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">Submit Log</button>
                     </div>
                   ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
