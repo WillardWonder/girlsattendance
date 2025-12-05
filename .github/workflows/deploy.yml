@@ -18,7 +18,14 @@ jobs:
         with:
           node-version: 18
       - run: npm install
+      # THIS SECTION BELOW INJECTS YOUR SECRETS DURING BUILD
+      # It maps the secrets you saved in GitHub Settings to the VITE_ variables in your code
       - run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
+          VITE_COACH_PASSWORD: ${{ secrets.VITE_COACH_PASSWORD }}
+          VITE_GOOGLE_SCRIPT_URL: ${{ secrets.VITE_GOOGLE_SCRIPT_URL }}
+          VITE_GOOGLE_CALENDAR_ID: ${{ secrets.VITE_GOOGLE_CALENDAR_ID }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
