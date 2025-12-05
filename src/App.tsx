@@ -7,13 +7,13 @@ import {
   Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, Unlock, 
   History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
-  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound
+  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound, Mail
 } from 'lucide-react';
 
-// --- CONFIGURATION ---
+// --- CONFIGURATION (HARDCODED TO FIX BUILD ERROR) ---
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
   authDomain: "girls-wrestling-attendance.firebaseapp.com",
   projectId: "girls-wrestling-attendance",
   storageBucket: "girls-wrestling-attendance.firebasestorage.app",
@@ -22,10 +22,12 @@ const firebaseConfig = {
   measurementId: "G-CVY2FGY8L2"
 };
 
-const GOOGLE_SCRIPT_URL = import.meta.env.VITE_GOOGLE_SCRIPT_URL || ""; 
-const GOOGLE_CALENDAR_ID = import.meta.env.VITE_GOOGLE_CALENDAR_ID || ""; 
-const COACH_PASSWORD = import.meta.env.VITE_COACH_PASSWORD || "bluejays";
+// URLs and Secrets directly in code to bypass ES2015 build restriction
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
+const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
+const COACH_PASSWORD = "bluejays";
 
+// Allowed domains for student registration
 const ALLOWED_DOMAINS = ["@mapsedu.org", "@maps.k12.wi.us"];
 
 // Initialize Firebase
@@ -33,7 +35,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// --- PRELOADED DATA ---
+// --- PRELOADED DATA (Optional backup list) ---
 const PRELOADED_ROSTER = [];
 
 const App = () => {
@@ -76,7 +78,7 @@ const App = () => {
   const [focusState, setFocusState] = useState<'idle' | 'playing' | 'finished'>('idle');
   const [focusGrid, setFocusGrid] = useState<number[]>([]);
   const [focusNextNumber, setFocusNextNumber] = useState(0);
-  const [focusTimeLeft, setFocusTimeLeft] = useState(120);
+  const [focusTimeLeft, setFocusTimeLeft] = useState(120); // 2 minutes
   const [focusScore, setFocusScore] = useState(0);
 
   // Stats View State
@@ -103,7 +105,7 @@ const App = () => {
   const [reportStudentFilter, setReportStudentFilter] = useState('');
   const [reportGradeFilter, setReportGradeFilter] = useState('');
   
-  // Content Inputs
+  // Content Management Inputs
   const [newAnnouncement, setNewAnnouncement] = useState('');
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoURL, setNewVideoURL] = useState('');
@@ -138,6 +140,7 @@ const App = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        // Roster
         const rosterQ = query(collection(db, "roster"), orderBy("Last_Name"));
         const rosterSnap = await getDocs(rosterQ);
         const loadedRoster = rosterSnap.docs.map(doc => {
@@ -148,21 +151,27 @@ const App = () => {
         });
         setRoster(loadedRoster);
 
+        // Announcements
         const newsQ = query(collection(db, "announcements"), orderBy("timestamp", "desc"), limit(10));
         const newsSnap = await getDocs(newsQ);
         setAnnouncements(newsSnap.docs.map(d => ({id: d.id, ...d.data()})));
 
+        // Resources
         const resQ = query(collection(db, "resources"), orderBy("timestamp", "desc"));
         const resSnap = await getDocs(resQ);
         setResources(resSnap.docs.map(d => ({id: d.id, ...d.data()})));
+
       } catch (e: any) {
-        if (e.message && e.message.includes("permission")) setPermissionError(true);
+        console.error("Init Error:", e);
+        if (e.message && e.message.includes("Missing or insufficient permissions")) {
+          setPermissionError(true);
+        }
       }
     };
     fetchData();
   }, []);
 
-  // Admin Data Fetch (Used for both User Coach and App Mode Coach)
+  // Admin Data Fetch
   useEffect(() => {
     if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
       const fetchAdminData = async () => {
@@ -186,14 +195,22 @@ const App = () => {
       const querySnapshot = await getDocs(q);
       const records = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setHistoryRecords(records);
+
       const stats: {[key: string]: number} = {};
       records.forEach((data: any) => {
         const date = data.date;
         if(date) stats[date] = (stats[date] || 0) + 1;
       });
-      const statsArray = Object.keys(stats).map(date => ({ date, count: stats[date] })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      const statsArray = Object.keys(stats).map(date => ({
+        date,
+        count: stats[date]
+      })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       setHistoryStats(statsArray);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    }
   };
 
   // --- AUTH LISTENER ---
@@ -208,6 +225,58 @@ const App = () => {
     });
     return () => unsubscribe();
   }, [roster]);
+
+  // --- FOCUS GAME LOGIC ---
+  useEffect(() => {
+    let timer: any;
+    if (focusState === 'playing' && focusTimeLeft > 0) {
+      timer = setInterval(() => {
+        setFocusTimeLeft(prev => prev - 1);
+      }, 1000);
+    } else if (focusTimeLeft === 0 && focusState === 'playing') {
+      endFocusGame();
+    }
+    return () => clearInterval(timer);
+  }, [focusState, focusTimeLeft]);
+
+  const startFocusGame = () => {
+    if (!selectedStudent) { alert("Please select your name first."); return; }
+    const numbers = Array.from({length: 100}, (_, i) => i);
+    for (let i = numbers.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
+    }
+    setFocusGrid(numbers);
+    setFocusNextNumber(0);
+    setFocusScore(0);
+    setFocusTimeLeft(120);
+    setFocusState('playing');
+  };
+
+  const handleGridClick = (num: number) => {
+    if (num === focusNextNumber) {
+        const newScore = focusNextNumber + 1;
+        setFocusNextNumber(newScore);
+        setFocusScore(newScore);
+        if (newScore === 100) endFocusGame(true);
+    }
+  };
+
+  const endFocusGame = async (completed = false) => {
+    setFocusState('finished');
+    if (selectedStudent) {
+        const scoreData = {
+            studentId: selectedStudent.id,
+            name: selectedStudent.name,
+            score: completed ? 100 : focusNextNumber,
+            completed,
+            timestamp: new Date().toISOString(),
+            date: new Date().toLocaleDateString(),
+            type: 'focus_drill'
+        };
+        await addDoc(collection(db, "focus_scores"), scoreData);
+    }
+  };
 
   // --- ACTIONS ---
 
@@ -284,80 +353,291 @@ const App = () => {
     signOut(auth);
     setIsCoachAuthenticated(false);
     setSelectedStudent(null);
-    setUser(null); // Explicit clear
+    setUser(null); 
   };
 
   const handleCheckIn = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent || !weight) { setError("Name and Weight required."); return; }
     setLoading(true); setSyncStatus('syncing');
+
     const data = {
       studentId: selectedStudent.id, name: selectedStudent.name, grade: selectedStudent.grade || '', weight: parseFloat(weight),
       skinCheckPass: skinCheck, notes, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString(),
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'attendance'
     };
+
     try {
       await addDoc(collection(db, "attendance"), data);
       if (GOOGLE_SCRIPT_URL) {
-        fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-        .then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
-      } else { setSyncStatus('success'); }
+        fetch(GOOGLE_SCRIPT_URL, {
+          method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
+        }).then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
+      }
       setCheckInSuccess(true);
-      setTimeout(() => { setCheckInSuccess(false); setWeight(''); setNotes(''); setSyncStatus('idle'); }, 2500);
+      setTimeout(() => { setCheckInSuccess(false); setWeight(''); setNotes(''); setSearchTerm(''); setSelectedStudent(null); setSyncStatus('idle'); }, 2500);
     } catch (err: any) {
       if (err.message && err.message.includes("permissions")) setPermissionError(true); else setError("Check-in failed.");
     } finally { setLoading(false); }
   };
 
-  // ... (Journal, Video, Stats, Game logic preserved from previous versions) ...
-  // Re-included for completeness in the return render
-  
   const handleJournalSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent || !focusWord) { setError("Name and Focus Word required."); return; }
     setLoading(true);
-    const data = { studentId: selectedStudent.id, name: selectedStudent.name, gratitude: journalGratitude, focusWord, focusStatement, energy: energyLevel, mood: moodLevel, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString(), type: 'journal' };
-    try { await addDoc(collection(db, "journals"), data); if (GOOGLE_SCRIPT_URL) { fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) }); } setJournalSuccess(true); setTimeout(() => { setJournalSuccess(false); setJournalGratitude(''); setFocusWord(''); setFocusStatement(''); setEnergyLevel(3); setMoodLevel(3); setSearchTerm(''); setSelectedStudent(null); }, 2500); } catch (err) { setError("Failed to save journal."); } finally { setLoading(false); }
+
+    const data = {
+      studentId: selectedStudent.id, name: selectedStudent.name, gratitude: journalGratitude, focusWord, focusStatement,
+      energy: energyLevel, mood: moodLevel, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString(), type: 'journal'
+    };
+
+    try {
+      await addDoc(collection(db, "journals"), data);
+      if (GOOGLE_SCRIPT_URL) {
+        fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
+        .then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
+      }
+      setJournalSuccess(true);
+      setTimeout(() => { 
+          setJournalSuccess(false); setJournalGratitude(''); setFocusWord(''); setFocusStatement(''); setEnergyLevel(3); setMoodLevel(3); setSearchTerm(''); setSelectedStudent(null);
+      }, 2500);
+    } catch (err) { setError("Failed to save journal."); } finally { setLoading(false); }
   };
 
-  const startFocusGame = () => {
-    if (!selectedStudent) { alert("Please select your name first."); return; }
-    const numbers = Array.from({length: 100}, (_, i) => i);
-    for (let i = numbers.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [numbers[i], numbers[j]] = [numbers[j], numbers[i]]; }
-    setFocusGrid(numbers); setFocusNextNumber(0); setFocusScore(0); setFocusTimeLeft(120); setFocusState('playing');
+  const loadStudentStats = async (student: any) => {
+    setStatsStudent(student);
+    const q = query(collection(db, "attendance"), where("studentId", "==", student.id), orderBy("timestamp", "desc"), limit(20));
+    const snap = await getDocs(q);
+    setStudentHistory(snap.docs.map(d => d.data()));
   };
 
-  useEffect(() => {
-    let timer: any;
-    if (focusState === 'playing' && focusTimeLeft > 0) { timer = setInterval(() => { setFocusTimeLeft(prev => prev - 1); }, 1000); } 
-    else if (focusTimeLeft === 0 && focusState === 'playing') { 
-      setFocusState('finished'); 
-      if(selectedStudent) addDoc(collection(db, "focus_scores"), { studentId: selectedStudent.id, name: selectedStudent.name, score: focusNextNumber, date: new Date().toLocaleDateString() });
+  const handleAddAnnouncement = async () => {
+    if(!newAnnouncement) return;
+    try {
+      await addDoc(collection(db, "announcements"), { message: newAnnouncement, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString() });
+      setNewAnnouncement(''); alert('Posted!');
+    } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
+  };
+
+  const handleAddVideo = async () => {
+    if(!newVideoTitle || !newVideoURL) return;
+    try {
+      await addDoc(collection(db, "resources"), { title: newVideoTitle, url: newVideoURL, type: 'youtube', timestamp: new Date().toISOString() });
+      setNewVideoTitle(''); setNewVideoURL(''); alert('Video Added!');
+    } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
+  };
+
+  const unlockCoach = (e: React.FormEvent) => {
+    e.preventDefault();
+    if(passwordInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setPasswordInput(''); } 
+    else { alert('Wrong Password'); }
+  };
+
+  const handleDeleteCheckIn = async (id: string, name: string) => {
+    if(!confirm(`Remove ${name}?`)) return;
+    await deleteDoc(doc(db, "attendance", id));
+    const today = new Date().toLocaleDateString();
+    const attQ = query(collection(db, "attendance"), where("date", "==", today));
+    const attSnap = await getDocs(attQ);
+    setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()})));
+  };
+
+  const handleCopyForSheets = (date: string) => {
+    const records = historyRecords.filter(r => r.date === date).sort((a,b) => String(a.name).localeCompare(String(b.name)));
+    let text = "Name\tWeight\tTime\tNotes\n";
+    records.forEach(r => {
+      text += `${r.name}\t${r.weight}\t${r.time}\t${r.notes || ''}\n`;
+    });
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedDate(date);
+      setTimeout(() => setCopiedDate(null), 2000);
+    });
+  };
+
+  const handleGenerateReport = async () => {
+    try {
+        let records = historyRecords;
+        const start = new Date(reportStartDate).setHours(0,0,0,0);
+        const end = new Date(reportEndDate).setHours(23,59,59,999);
+
+        records = records.filter(r => {
+            const rDate = new Date(r.timestamp).getTime();
+            return rDate >= start && rDate <= end;
+        });
+
+        if (reportStudentFilter) records = records.filter(r => r.name === reportStudentFilter);
+        if (reportGradeFilter) records = records.filter(r => r.grade === reportGradeFilter);
+
+        if (records.length === 0) {
+            alert("No records found matching these filters.");
+            return;
+        }
+
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Date,Time,Name,Grade,Weight,Skin Check,Notes\n";
+
+        records.forEach(row => {
+            const skinCheck = row.skinCheckPass ? "Pass" : "Fail";
+            const notes = row.notes ? `"${row.notes.replace(/"/g, '""')}"` : "";
+            csvContent += `${row.date},${row.time},${row.name},${row.grade || ''},${row.weight},${skinCheck},${notes}\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `attendance_report_${reportStartDate}_to_${reportEndDate}.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+    } catch (e) {
+        console.error(e);
+        alert("Error generating report");
     }
-    return () => clearInterval(timer);
-  }, [focusState, focusTimeLeft]);
+  };
 
-  const handleGridClick = (num: number) => { if (num === focusNextNumber) { const s = focusNextNumber + 1; setFocusNextNumber(s); setFocusScore(s); if(s===100) setFocusState('finished'); } };
+  // --- ADMIN ROSTER TOOLS ---
+  const handleBulkImport = async () => {
+    if (!csvData) return;
+    setImportStatus('Parsing...');
+    const rows = csvData.trim().split('\n');
+    if (rows.length < 2) { setImportStatus('Error: No data rows found.'); return; }
+    
+    const firstRow = rows[0];
+    const separator = firstRow.includes('\t') ? '\t' : ',';
+    
+    const normalizeHeader = (h: string) => {
+        const clean = h.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (['lastname', 'last_name', 'last'].includes(clean)) return 'Last_Name';
+        if (['firstname', 'first_name', 'first'].includes(clean)) return 'First_Name';
+        return h.trim().replace(/^"|"$/g, ''); 
+    };
 
-  const handleAddAnnouncement = async () => { if(!newAnnouncement) return; await addDoc(collection(db, "announcements"), { message: newAnnouncement, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString() }); setNewAnnouncement(''); alert('Posted!'); };
-  const handleAddVideo = async () => { if(!newVideoTitle || !newVideoURL) return; await addDoc(collection(db, "resources"), { title: newVideoTitle, url: newVideoURL, type: 'youtube', timestamp: new Date().toISOString() }); setNewVideoTitle(''); setNewVideoURL(''); alert('Video Added!'); };
-  const handleDeleteCheckIn = async (id: string) => { if(!confirm('Delete?')) return; await deleteDoc(doc(db, "attendance", id)); const today = new Date().toLocaleDateString(); const attQ = query(collection(db, "attendance"), where("date", "==", today)); getDocs(attQ).then(s => setTodaysAttendance(s.docs.map(d => ({id: d.id, ...d.data()})))); };
-  const handleCopyForSheets = (date: string) => { const records = historyRecords.filter(r => r.date === date).sort((a,b) => String(a.name).localeCompare(String(b.name))); let text = "Name\tWeight\tTime\tNotes\n"; records.forEach(r => { text += `${r.name}\t${r.weight}\t${r.time}\t${r.notes || ''}\n`; }); navigator.clipboard.writeText(text).then(() => { setCopiedDate(date); setTimeout(() => setCopiedDate(null), 2000); }); };
-  const handleGenerateReport = async () => { /* ... (Previous report logic) ... */ alert("Downloading Report..."); };
-  const handleBulkImport = async () => { /* ... (Previous bulk import logic) ... */ alert("Importing..."); };
-  const handleDeleteAllRoster = async () => { if(!confirm("Delete all?")) return; /* ... (Delete logic) ... */ alert("Deleted."); };
-  const handleDeduplicate = async () => { if(!confirm("Deduplicate?")) return; /* ... (Dedupe logic) ... */ alert("Cleaned."); };
-  const handlePreloadedImport = async () => { alert("Use Manual Import"); };
+    const originalHeaders = firstRow.split(separator).map(h => h.trim());
+    const headers = originalHeaders.map(normalizeHeader);
+    
+    if (!headers.includes('Last_Name') || !headers.includes('First_Name')) {
+      setImportStatus(`Error: Missing Name columns.`);
+      return;
+    }
 
-  const unlockCoach = (e: React.FormEvent) => { e.preventDefault(); if(passwordInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setPasswordInput(''); } else { alert('Wrong Password'); } };
+    const csvWrestlers = rows.slice(1).map(row => {
+      if (!row.trim()) return null;
+      const values = row.split(separator);
+      const obj: any = {};
+      headers.forEach((header, index) => {
+        let val = values[index]?.trim();
+        if (val && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
+        if (header) obj[header] = val;
+      });
+      return obj;
+    }).filter(w => w && w.Last_Name && w.First_Name); 
+
+    setImportStatus('Checking for duplicates...');
+    try {
+        const currentRosterSnapshot = await getDocs(collection(db, "roster"));
+        const existingNames = new Set();
+        currentRosterSnapshot.docs.forEach(doc => {
+            const data = doc.data();
+            const fName = (data.First_Name || data.firstname || '').toString().toLowerCase().trim();
+            const lName = (data.Last_Name || data.lastname || '').toString().toLowerCase().trim();
+            existingNames.add(`${fName}-${lName}`);
+        });
+
+        const newWrestlers = csvWrestlers.filter(w => {
+            const fName = (w.First_Name || '').toString().toLowerCase().trim();
+            const lName = (w.Last_Name || '').toString().toLowerCase().trim();
+            return !existingNames.has(`${fName}-${lName}`);
+        });
+
+        if (newWrestlers.length === 0) {
+            setImportStatus('All names in CSV already exist. No changes made.');
+            return;
+        }
+
+        setImportStatus(`Uploading ${newWrestlers.length} new wrestlers...`);
+        const batch = writeBatch(db);
+        newWrestlers.forEach(wrestler => {
+            const docRef = doc(collection(db, "roster"));
+            batch.set(docRef, wrestler);
+        });
+        await batch.commit();
+        setImportStatus(`Success! Added ${newWrestlers.length} new wrestlers.`);
+        setCsvData('');
+    } catch (e: any) {
+        setImportStatus('Error uploading: ' + e.message);
+        if (e.message && e.message.includes("permissions")) setPermissionError(true);
+    }
+  };
+
+  const handlePreloadedImport = async () => {
+    if (PRELOADED_ROSTER.length === 0) { alert("No roster data in code. Use Manual Import."); return; }
+    // Logic similar to Bulk Import but using PRELOADED_ROSTER array
+    // ... (omitted for brevity, same logic as boys app)
+    alert("Please use Manual Import or paste roster into code first.");
+  };
+
+  const handleDeleteAllRoster = async () => {
+    if (!confirm("⚠️ WARNING: This will DELETE EVERY STUDENT in the roster. Are you sure?")) return;
+    setImportStatus('Deleting entire roster...');
+    try {
+        const q = query(collection(db, "roster"));
+        const snapshot = await getDocs(q);
+        const batchSize = 500;
+        const docs = snapshot.docs;
+        for (let i = 0; i < docs.length; i += batchSize) {
+            const batch = writeBatch(db);
+            const chunk = docs.slice(i, i + batchSize);
+            chunk.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        }
+        setImportStatus('Roster wiped clean.');
+    } catch (e: any) {
+        setImportStatus('Error deleting: ' + e.message);
+        if (e.message && e.message.includes("permissions")) setPermissionError(true);
+    }
+  };
+
+  // --- RENDER HELPERS ---
+  const filteredRoster = roster.filter(s => s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const getAbsentStudents = () => {
+    const presentIds = new Set(todaysAttendance.map(a => a.studentId));
+    return roster.filter(student => !presentIds.has(student.id));
+  };
 
   // ---------------- UI ----------------
 
-  if (permissionError) return <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4"><div className="bg-red-900/20 border border-red-500 p-8 rounded-xl text-center"><ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4"/><h2 className="text-2xl font-bold text-white mb-4">Database Locked</h2><p className="text-gray-300 mb-6">Coach needs to fix Firebase security permissions.</p><button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full">Reload</button></div></div>;
+  if (permissionError) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
+        <div className="bg-red-900/20 border border-red-500 p-8 rounded-xl max-w-lg w-full text-center">
+          <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-4">Database Locked</h2>
+          <p className="text-gray-300 mb-6">Coach needs to fix Firebase security permissions.</p>
+          <button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full">Reload</button>
+        </div>
+      </div>
+    );
+  }
 
-  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) return <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4"><div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center"><Lock className="w-12 h-12 text-pink-500 mx-auto mb-4"/><h2 className="text-xl font-bold text-white mb-2">Coach Access</h2><form onSubmit={unlockCoach}><input type="password" placeholder="Password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4 text-center" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus /><button className="w-full bg-pink-600 text-white font-bold py-3 rounded-lg">Unlock</button></form><button onClick={() => setAppMode('athlete')} className="mt-6 text-gray-500 text-sm">Back to Athlete View</button></div></div>;
+  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) {
+    return (
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
+        <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center">
+          <Lock className="w-12 h-12 text-pink-500 mx-auto mb-4" />
+          <h2 className="text-xl font-bold text-white mb-2">Coach Access</h2>
+          <form onSubmit={unlockCoach}>
+            <input type="password" placeholder="Password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4 text-center"
+              value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
+            <button className="w-full bg-pink-600 text-white font-bold py-3 rounded-lg">Unlock</button>
+          </form>
+          <button onClick={() => setAppMode('athlete')} className="mt-6 text-gray-500 text-sm">Back to Athlete View</button>
+        </div>
+      </div>
+    );
+  }
 
-  // COACH DASHBOARD (Unified for both Auth Login & Secret Button)
+  // COACH DASHBOARD
   if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
@@ -370,6 +650,7 @@ const App = () => {
             <button key={t} onClick={() => setAdminTab(t)} className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${adminTab === t ? 'bg-pink-600' : 'bg-gray-800 text-gray-400'}`}>{t.charAt(0).toUpperCase() + t.slice(1)}</button>
           ))}
         </div>
+        {/* LIVE TAB */}
         {adminTab === 'live' && (
           <div className="space-y-4">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -382,7 +663,7 @@ const App = () => {
                 {todaysAttendance.map(r => (
                   <div key={r.id} className="p-3 flex justify-between items-center">
                     <div><div className="font-bold">{r.name}</div><div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div></div>
-                    <div className="flex items-center gap-2">{!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}<button onClick={() => handleDeleteCheckIn(r.id)}><XCircle className="w-5 h-5 text-gray-500"/></button></div>
+                    <div className="flex items-center gap-2">{!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}<button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button></div>
                   </div>
                 ))}
               </div>
@@ -397,6 +678,7 @@ const App = () => {
             </div>
           </div>
         )}
+        {/* HISTORY TAB */}
         {adminTab === 'history' && (
           <div className="space-y-4">
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
@@ -428,6 +710,7 @@ const App = () => {
              </div>
           </div>
         )}
+        {/* CONTENT TAB */}
         {adminTab === 'content' && (
           <div className="space-y-6">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -448,6 +731,7 @@ const App = () => {
             </div>
           </div>
         )}
+        {/* ROSTER TAB */}
         {adminTab === 'roster' && (
           <div className="space-y-6">
              <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-lg">
@@ -459,10 +743,6 @@ const App = () => {
                 <textarea className="w-full bg-gray-800 border border-gray-600 text-xs text-gray-300 p-2 rounded h-24 font-mono" placeholder={`Email,Last_Name,First_Name\njane@school.edu,Doe,Jane`} value={csvData} onChange={(e) => setCsvData(e.target.value)} />
                 <button onClick={handleBulkImport} className="mt-2 w-full bg-gray-600 hover:bg-gray-500 text-white text-sm py-2 rounded flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" /> Process Import</button>
                 {importStatus && (<div className="mt-2 text-xs text-blue-400 font-mono">{importStatus}</div>)}
-             </div>
-             <div className="bg-orange-900/10 border border-orange-900/50 p-4 rounded-lg">
-                 <h4 className="text-orange-400 font-bold mb-2 flex items-center gap-2"><Trash2 className="w-4 h-4"/> Maintenance</h4>
-                 <button onClick={handleDeduplicate} className="w-full bg-orange-900/30 hover:bg-orange-900/50 text-orange-300 border border-orange-800 text-sm py-2 rounded-lg font-bold transition-all">Fix Duplicate Roster Entries</button>
              </div>
              <div className="flex gap-2">
                 <input type="text" placeholder="Lastname, Firstname" className="bg-gray-800 border border-gray-600 rounded p-2 text-sm text-white flex-1" value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} />
@@ -501,9 +781,7 @@ const App = () => {
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
               <h2 className="text-white font-bold text-lg">Create Account</h2>
-              <div className="bg-blue-900/20 p-3 rounded border border-blue-800 text-xs text-blue-200">
-                Must use official school email ({ALLOWED_DOMAINS[0]})
-              </div>
+              <div className="bg-blue-900/20 p-3 rounded border border-blue-800 text-xs text-blue-200">Must use official school email ({ALLOWED_DOMAINS[0]})</div>
               <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="lakeyn.adams@mapsedu.org" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
               <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password (min 6 chars)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
               <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
@@ -514,12 +792,9 @@ const App = () => {
           )}
 
           <div className="mt-8 pt-8 border-t border-gray-700">
-             <button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full">
-               <Lock className="w-3 h-3"/> Coach Admin
-             </button>
+             <button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button>
           </div>
         </div>
-        {/* Coach Login Overlay */}
         {isCoachAuthenticated && !user?.email && (
              <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
                  <div className="bg-gray-800 p-8 rounded-xl w-full max-w-sm relative">
@@ -545,12 +820,14 @@ const App = () => {
       </div>
 
       <div className="p-4 max-w-md mx-auto">
+         {/* 1. CHECK IN */}
          {activeTab === 'checkin' && (
             <div className="animate-in fade-in">
                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl mb-6">
                   <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Clock className="w-5 h-5 text-pink-400"/> Daily Check-in</h2>
                   {currentStudent ? (
                     <div className="space-y-4">
+                       <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Checking in as <span className="font-bold">{selectedStudent ? selectedStudent.name : currentStudent.name}</span></div>
                        <div><label className="text-gray-400 text-xs font-bold">Weight</label><input type="number" step="0.1" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-xl text-xl font-mono" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" /></div>
                        <div><label className="text-gray-400 text-xs font-bold">Skin Check</label><div className="flex gap-2"><button onClick={() => setSkinCheck(true)} className={`flex-1 py-3 rounded-xl border ${skinCheck ? 'bg-green-600 border-green-500' : 'bg-gray-700 border-gray-600'}`}>Pass</button><button onClick={() => setSkinCheck(false)} className={`flex-1 py-3 rounded-xl border ${!skinCheck ? 'bg-red-600 border-red-500' : 'bg-gray-700 border-gray-600'}`}>Fail</button></div></div>
                        <button onClick={() => { setSelectedStudent(currentStudent); handleCheckIn({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">{loading ? '...' : 'Submit'}</button>
@@ -563,8 +840,7 @@ const App = () => {
                </div>
             </div>
          )}
-
-         {/* Other tabs (Journal, Focus, etc.) rely on currentStudent now */}
+         {/* 2. JOURNAL */}
          {activeTab === 'journal' && (
             <div className="animate-in fade-in">
                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
@@ -584,10 +860,10 @@ const App = () => {
                </div>
             </div>
          )}
-
+         {/* 3. FOCUS */}
          {activeTab === 'focus' && (
            <div className="animate-in fade-in h-full flex flex-col">
-             {currentStudent && (
+             {currentStudent ? (
                <div className="flex-1 flex flex-col">
                   {focusState === 'idle' && (
                     <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 text-center m-auto">
@@ -615,11 +891,10 @@ const App = () => {
                     </div>
                   )}
                </div>
-             )}
+             ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
            </div>
          )}
-         
-         {/* Resources, Calendar, Stats tabs rendered here (similar structure, referencing currentStudent) */}
+         {/* 4. RESOURCES */}
          {activeTab === 'resources' && (
             <div className="space-y-4 animate-in fade-in">
                <h2 className="text-2xl font-bold text-white mb-4">Videos</h2>
@@ -642,22 +917,22 @@ const App = () => {
                 )})}
             </div>
          )}
-
+         {/* 5. CALENDAR */}
          {activeTab === 'calendar' && (
             <div className="space-y-3 animate-in fade-in">
               <h2 className="text-2xl font-bold text-white mb-4">Schedule</h2>
               <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 p-1">
                  <iframe src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&theme=DARK`} style={{border: 0, width: "100%", height: "400px"}} frameBorder="0" scrolling="no"></iframe>
               </div>
+              <a href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(GOOGLE_CALENDAR_ID)}`} target="_blank" rel="noreferrer" className="block w-full text-center bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all">+ Add to My Calendar</a>
             </div>
          )}
-
+         {/* 6. STATS */}
          {activeTab === 'stats' && (
              <div className="space-y-4 animate-in fade-in">
                  <h2 className="text-2xl font-bold text-white">My History</h2>
                  {currentStudent ? (
                     <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                       {/* We trigger load stats on mount via effect, but need to render */}
                        {studentHistory.length === 0 && <div className="text-gray-500 text-center py-4">No history found yet.</div>}
                        <div className="space-y-2">
                           {studentHistory.map((h, i) => (
@@ -671,7 +946,6 @@ const App = () => {
                  ) : <div className="text-center text-gray-500">Loading stats...</div>}
              </div>
          )}
-
       </div>
 
       {/* NAV BAR */}
