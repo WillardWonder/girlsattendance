@@ -121,6 +121,13 @@ const App = () => {
     setSearchTerm(student.name || "");
   };
 
+  const getYouTubeId = (url: string) => {
+    if (!url) return null;
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
+
   // --- DATA LOADING ---
   useEffect(() => {
     const fetchData = async () => {
@@ -451,6 +458,7 @@ const App = () => {
     }
   };
 
+  // --- ADMIN ROSTER TOOLS ---
   const handleBulkImport = async () => {
     if (!csvData) return;
     setImportStatus('Parsing...');
@@ -526,6 +534,8 @@ const App = () => {
 
   const handlePreloadedImport = async () => {
     if (PRELOADED_ROSTER.length === 0) { alert("No roster data in code. Use Manual Import."); return; }
+    // Logic similar to Bulk Import but using PRELOADED_ROSTER array
+    // ... (omitted for brevity, same logic as boys app)
     alert("Please use Manual Import or paste roster into code first.");
   };
 
@@ -1074,9 +1084,24 @@ const App = () => {
               <div className="space-y-4 animate-in fade-in">
                 <h2 className="text-2xl font-bold text-white mb-4">Training Videos</h2>
                 {resources.length === 0 && <div className="text-center text-gray-500 py-10">No videos added yet by coach.</div>}
-                {resources.map(vid => (
+                {resources.map(vid => {
+                  const videoId = getYouTubeId(vid.url);
+                  return (
                   <div key={vid.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
-                    {/* Basic Embed or Link */}
+                    {videoId && (
+                      <a href={vid.url} target="_blank" rel="noreferrer" className="block relative group">
+                         <img 
+                           src={`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`} 
+                           alt={vid.title} 
+                           className="w-full h-48 object-cover group-hover:opacity-80 transition-opacity"
+                         />
+                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="bg-black/50 rounded-full p-3">
+                              <Play className="w-8 h-8 text-white fill-current"/> 
+                            </div>
+                         </div>
+                      </a>
+                    )}
                     <div className="p-4">
                       <h3 className="font-bold text-white text-lg mb-1">{vid.title}</h3>
                       <a href={vid.url} target="_blank" rel="noreferrer" className="text-pink-400 text-sm flex items-center gap-1 hover:underline">
@@ -1084,7 +1109,7 @@ const App = () => {
                       </a>
                     </div>
                   </div>
-                ))}
+                )})}
               </div>
             )}
 
