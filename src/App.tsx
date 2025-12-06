@@ -661,6 +661,15 @@ const App = () => {
         {/* --- TAB 1: DAILY GRIND --- */}
         {activeTab === 'daily' && (
           <div className="space-y-6 animate-in fade-in">
+            {/* Show Announcement if exists */}
+            {announcements.length > 0 && (
+              <div className="bg-gradient-to-r from-pink-900/50 to-purple-900/50 p-4 rounded-xl border border-pink-500/30 mb-4">
+                <h3 className="text-pink-300 text-xs font-bold uppercase mb-1 flex items-center gap-2"><Megaphone className="w-3 h-3"/> Latest News</h3>
+                <p className="text-white text-sm">{announcements[0].message}</p>
+                <p className="text-pink-500/50 text-[10px] mt-2 text-right">{announcements[0].date}</p>
+              </div>
+            )}
+
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Flame className="w-5 h-5 text-orange-500"/> The Daily Grind</h2>
             {dailyComplete ? (
               <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
@@ -742,6 +751,48 @@ const App = () => {
             </div>
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
                <h3 className="text-sm font-bold text-white">2. Weekly Check-In</h3>
+               
+               {/* Academic */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Grades / Academics on track?</label>
+                 <div className="flex gap-2">
+                   {['Yes', 'No'].map(opt => (
+                     <button key={opt} onClick={() => setWeeklyAcademic(opt)} 
+                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyAcademic === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
+                       {opt}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Weight */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Weight Management on track?</label>
+                 <div className="flex gap-2">
+                   {['Yes', 'No'].map(opt => (
+                     <button key={opt} onClick={() => setWeeklyWeight(opt)} 
+                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyWeight === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
+                       {opt}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Recovery */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Recovery Level (1-10)</label>
+                 <input type="range" min="1" max="10" className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" 
+                   value={weeklyRecovery} onChange={e => setWeeklyRecovery(parseInt(e.target.value))} />
+                 <div className="text-center text-xl font-bold text-blue-400 mt-1">{weeklyRecovery}</div>
+               </div>
+
+               {/* Goal */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-1">Weekly Goal</label>
+                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" 
+                   placeholder="One specific thing to improve..." value={weeklyGoal} onChange={e => setWeeklyGoal(e.target.value)} />
+               </div>
+
                <button onClick={submitWeekly} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">Submit Launch</button>
             </div>
             </>
@@ -775,14 +826,41 @@ const App = () => {
            </div>
         )}
 
+        {/* --- TAB 6: LIBRARY (New) --- */}
+        {activeTab === 'library' && (
+          <div className="space-y-6 animate-in fade-in">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Video className="w-5 h-5 text-purple-500"/> Video Library</h2>
+            <div className="space-y-4">
+              {resources.map(r => {
+                 const meta = getVideoMetadata(r.url);
+                 return (
+                   <div key={r.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
+                     {meta.type === 'youtube' && meta.id ? (
+                        <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${meta.id}`} title={r.title} frameBorder="0" allowFullScreen></iframe>
+                     ) : (
+                        <div className="h-32 bg-gray-900 flex items-center justify-center"><Video className="w-8 h-8 text-gray-600"/></div>
+                     )}
+                     <div className="p-3">
+                       <h3 className="font-bold text-white text-sm">{r.title}</h3>
+                       <a href={r.url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 flex items-center gap-1 mt-1"><ExternalLink className="w-3 h-3"/> Open Link</a>
+                     </div>
+                   </div>
+                 );
+              })}
+              {resources.length === 0 && <p className="text-gray-500 text-center text-sm">No videos added yet.</p>}
+            </div>
+          </div>
+        )}
+
       </div>
 
-      <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40">
+      <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto">
          <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
          <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
          <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
          <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
          <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
+         <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
       </div>
     </div>
   );
