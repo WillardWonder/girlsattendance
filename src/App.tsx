@@ -8,7 +8,7 @@ import {
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud, RefreshCw
+  XCircle, AlertTriangle, UploadCloud
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -26,10 +26,11 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 
 // --- SECURITY & ASSETS ---
-// Removed hardcoded "bluejays". Now checks for env vars safely without crashing if 'process' is undefined.
+// Checks for environment variable or defaults to empty string (no hardcoded password)
 const COACH_ACCESS_CODE = (typeof process !== "undefined" && process.env?.REACT_APP_COACH_CODE) || ""; 
 const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
-const LOGO_URL = "/merrill-logo.png"; // Added slash to reference root file
+// Pointing to the raw GitHub image content to ensure it loads
+const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendance/main/merrill-logo.png";
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -153,14 +154,6 @@ const App = () => {
   const selectStudent = (student: any) => {
     setSelectedStudent(student);
     setSearchTerm(student.name || "");
-  };
-
-  const handleResetAppData = () => {
-    if(confirm("This will clear cached data to fix loading errors. It will NOT delete your saved journals. Continue?")) {
-        localStorage.clear();
-        sessionStorage.clear();
-        window.location.reload();
-    }
   };
 
   const getVideoMetadata = (url: string) => {
@@ -482,7 +475,6 @@ const App = () => {
           </form>
           <div className="mt-8 pt-8 border-t border-gray-700 space-y-4">
             <button onClick={() => { setShowCoachLoginModal(true); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button>
-            <button onClick={handleResetAppData} className="text-red-900/50 hover:text-red-500 text-[10px] flex items-center justify-center gap-1 w-full uppercase font-bold tracking-wider"><RefreshCw className="w-3 h-3"/> Trouble Logging In? Fix / Reset App Data</button>
           </div>
         </div>
         
