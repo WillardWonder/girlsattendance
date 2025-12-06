@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, writeBatch, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
-  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Users
+  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -33,7 +33,7 @@ const auth = getAuth(app);
 const App = () => {
   // Auth State
   const [user, setUser] = useState<any>(null);
-  const [userProfile, setUserProfile] = useState<any>(null); // Stores the "Foundation" data
+  const [userProfile, setUserProfile] = useState<any>(null); 
   const [authLoading, setAuthLoading] = useState(true);
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
   const [emailInput, setEmailInput] = useState('');
@@ -46,16 +46,23 @@ const App = () => {
   const [successMsg, setSuccessMsg] = useState('');
 
   // --- TAB 1: DAILY GRIND STATE ---
+  const [dailyComplete, setDailyComplete] = useState(false); // New completion state
   const [sleepHours, setSleepHours] = useState('');
   const [sleepQuality, setSleepQuality] = useState('Good');
-  const [energyColor, setEnergyColor] = useState(''); // 'green', 'yellow', 'red'
+  const [energyColor, setEnergyColor] = useState(''); 
   const [nutrition, setNutrition] = useState({ veggies: false, protein: false, fruit: false, grain: false });
   const [hydration, setHydration] = useState(0);
   const [balance, setBalance] = useState({ faith: 5, family: 5, fitness: 5, finances: 5, academics: 5, fun: 5 });
   const [mentalImprovement, setMentalImprovement] = useState('');
   const [mentalTeammate, setMentalTeammate] = useState('');
+  // Added Mindset Fields to Daily
+  const [dailyGratitude, setDailyGratitude] = useState('');
+  const [dailyFocusWord, setDailyFocusWord] = useState('');
+  const [dailyFocusStatement, setDailyFocusStatement] = useState('');
+  const [dailyTechFocus, setDailyTechFocus] = useState('');
 
   // --- TAB 2: MATCH DAY STATE ---
+  const [matchComplete, setMatchComplete] = useState(false); // New completion state
   const [matchEvent, setMatchEvent] = useState('');
   const [matchOpponent, setMatchOpponent] = useState('');
   const [matchResult, setMatchResult] = useState('Win');
@@ -63,19 +70,21 @@ const App = () => {
   const [matchLearn, setMatchLearn] = useState('');
 
   // --- TAB 3: SUNDAY LAUNCH STATE ---
+  const [weeklyComplete, setWeeklyComplete] = useState(false); // New completion state
   const [weeklyAcademic, setWeeklyAcademic] = useState('No');
   const [weeklyWeight, setWeeklyWeight] = useState('Yes');
   const [weeklyRecovery, setWeeklyRecovery] = useState(5);
   const [weeklyGoal, setWeeklyGoal] = useState('');
+  
   // Focus Grid State
   const [focusState, setFocusState] = useState<'idle' | 'playing' | 'finished'>('idle');
   const [focusGrid, setFocusGrid] = useState<number[]>([]);
   const [focusNextNumber, setFocusNextNumber] = useState(0);
-  const [focusTime, setFocusTime] = useState(0); // Count up timer
+  const [focusTimeLeft, setFocusTimeLeft] = useState(120); // CHANGED: Countdown from 120
 
   // --- TAB 4: FOUNDATION STATE ---
   const [identityWords, setIdentityWords] = useState(['', '', '', '', '']);
-  const [whyLevels, setWhyLevels] = useState(['', '', '']); // Join, Important, Root
+  const [whyLevels, setWhyLevels] = useState(['', '', '']); 
   const [purposeStatement, setPurposeStatement] = useState('');
   const [showIdentityExamples, setShowIdentityExamples] = useState(false);
 
@@ -87,34 +96,25 @@ const App = () => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        try {
-          // Load Profile (Foundation)
-          const docRef = doc(db, "user_profiles", currentUser.uid);
-          const docSnap = await getDoc(docRef);
-          
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setUserProfile(data);
-            // Pre-fill foundation form
-            if (data.identity) setIdentityWords(data.identity);
-            if (data.whys) setWhyLevels(data.whys);
-            if (data.purpose) setPurposeStatement(data.purpose);
+        const docRef = doc(db, "user_profiles", currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUserProfile(data);
+          if (data.identity) setIdentityWords(data.identity);
+          if (data.whys) setWhyLevels(data.whys);
+          if (data.purpose) setPurposeStatement(data.purpose);
 
-            // SMART REDIRECT: Only force Foundation tab if they haven't filled out their Identity yet
-            if (!data.identity || data.identity[0] === '') {
-               setActiveTab('foundation');
-            } else {
-               setActiveTab('daily');
-            }
+          if (!data.identity || data.identity[0] === '') {
+             setActiveTab('foundation');
           } else {
-            // No profile doc at all? Send to Foundation tab
-            setActiveTab('foundation');
+             setActiveTab('daily');
           }
-          // Load Confidence Bank
-          loadConfidenceBank(currentUser.uid);
-        } catch (e) {
-          console.error("Profile load error:", e);
+        } else {
+          setActiveTab('foundation');
         }
+        loadConfidenceBank(currentUser.uid);
       }
       setAuthLoading(false);
     });
@@ -122,24 +122,16 @@ const App = () => {
   }, []);
 
   const loadConfidenceBank = async (uid: string) => {
-    try {
-      const q = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(50));
-      const snap = await getDocs(q);
-      const deposits = snap.docs.map(d => ({ 
-        id: d.id, 
-        date: d.data().date, 
-        improvement: d.data().mentalImprovement 
-      })).filter(d => d.improvement); // Only show entries with text
-      setConfidenceDeposits(deposits);
-    } catch (e: any) {
-      if (e.code === 'failed-precondition') {
-        console.warn("INDEX MISSING: Check Firebase Console to create index for daily_logs");
-      }
-      console.error("Confidence Bank Load Error", e);
-    }
+    const q = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(50));
+    const snap = await getDocs(q);
+    const deposits = snap.docs.map(d => ({ 
+      id: d.id, 
+      date: d.data().date, 
+      improvement: d.data().mentalImprovement 
+    })).filter(d => d.improvement);
+    setConfidenceDeposits(deposits);
   };
 
-  // --- SYNC TO GOOGLE SHEETS ---
   const syncToSheets = async (data: any) => {
     if (!GOOGLE_SCRIPT_URL) return;
     try {
@@ -152,8 +144,6 @@ const App = () => {
     } catch (e) { console.error("Sheet Sync Error", e); }
   };
 
-  // --- HANDLERS ---
-
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
@@ -162,7 +152,6 @@ const App = () => {
         await signInWithEmailAndPassword(auth, emailInput, passwordInput);
       } else {
         const cred = await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
-        // Create initial empty profile doc
         await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailInput, joined: new Date().toISOString() });
       }
     } catch (err: any) {
@@ -170,34 +159,57 @@ const App = () => {
     } finally { setLoading(false); }
   };
 
-  // TAB 1: DAILY GRIND SUBMIT
+  // --- SUBMISSION HANDLERS WITH CLEAR & COMPLETE ---
+
   const submitDaily = async () => {
     if (!energyColor || !sleepHours) { alert("Please fill out Sleep and Energy sections."); return; }
     setLoading(true);
     const data = {
       uid: user.uid,
       email: user.email,
-      type: 'daily_log',
+      type: 'journal', // UPDATED: Match script expectation
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString(),
+      name: userProfile?.identity ? "Profile User" : user.email, // Fallback name
+      // Expanded Journal Data
       sleep: { hours: sleepHours, quality: sleepQuality },
       energy: energyColor,
       nutrition,
       hydration,
       balance,
       mentalImprovement,
-      mentalTeammate
+      mentalTeammate,
+      gratitude: dailyGratitude,
+      focusWord: dailyFocusWord,
+      focusStatement: dailyFocusStatement,
+      techFocus: dailyTechFocus
     };
     await addDoc(collection(db, "daily_logs"), data);
     syncToSheets(data);
     setSuccessMsg("Day Logged! 1% Better.");
+    
+    // Clear Form & Set Complete
+    setDailyComplete(true);
+    setSleepHours('');
+    setEnergyColor('');
+    setNutrition({ veggies: false, protein: false, fruit: false, grain: false });
+    setHydration(0);
+    setMentalImprovement('');
+    setMentalTeammate('');
+    setDailyGratitude('');
+    setDailyFocusStatement('');
+    setDailyFocusWord('');
+    setDailyTechFocus('');
+    
     setTimeout(() => setSuccessMsg(''), 3000);
     setLoading(false);
-    // Refresh bank
     loadConfidenceBank(user.uid);
   };
 
-  // TAB 2: MATCH SUBMIT
+  const resetDaily = () => {
+    setDailyComplete(false);
+  };
+
   const submitMatch = async () => {
     if (!matchEvent || !matchOpponent) { alert("Please fill match details."); return; }
     setLoading(true);
@@ -214,37 +226,55 @@ const App = () => {
     await addDoc(collection(db, "match_logs"), data);
     syncToSheets(data);
     setSuccessMsg("Match Recorded.");
-    setTimeout(() => { setSuccessMsg(''); setMatchOpponent(''); setMatchWell(''); setMatchLearn(''); }, 3000);
+    
+    // Clear & Complete
+    setMatchComplete(true);
+    setMatchEvent('');
+    setMatchOpponent('');
+    setMatchWell('');
+    setMatchLearn('');
+    
+    setTimeout(() => setSuccessMsg(''), 3000);
     setLoading(false);
   };
 
-  // TAB 3: FOCUS GRID LOGIC
+  const resetMatch = () => {
+    setMatchComplete(false);
+  };
+
+  // --- FOCUS GRID LOGIC (COUNTDOWN) ---
   useEffect(() => {
     let timer: any;
-    if (focusState === 'playing') {
-      timer = setInterval(() => { setFocusTime(t => t + 1); }, 1000);
+    if (focusState === 'playing' && focusTimeLeft > 0) {
+      timer = setInterval(() => { setFocusTimeLeft(t => t - 1); }, 1000);
+    } else if (focusTimeLeft === 0 && focusState === 'playing') {
+      endFocusGame(false); // Time run out
     }
     return () => clearInterval(timer);
-  }, [focusState]);
+  }, [focusState, focusTimeLeft]);
 
   const startFocus = () => {
     const nums = Array.from({length: 100}, (_, i) => i);
-    // Shuffle
     for (let i = nums.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [nums[i], nums[j]] = [nums[j], nums[i]]; }
-    setFocusGrid(nums); setFocusNextNumber(0); setFocusTime(0); setFocusState('playing');
+    setFocusGrid(nums); setFocusNextNumber(0); setFocusTimeLeft(120); setFocusState('playing');
   };
 
   const tapFocusNumber = (num: number) => {
     if (num === focusNextNumber) {
       if (num === 99) {
-        setFocusState('finished');
+        endFocusGame(true); // Completed
       } else {
         setFocusNextNumber(n => n + 1);
       }
     }
   };
 
-  // TAB 3: WEEKLY PREP SUBMIT
+  const endFocusGame = async (completed: boolean) => {
+    setFocusState('finished');
+    // Save score if needed
+    // ...
+  };
+
   const submitWeekly = async () => {
     setLoading(true);
     const data = {
@@ -252,7 +282,7 @@ const App = () => {
       type: 'weekly_prep',
       timestamp: new Date().toISOString(),
       date: new Date().toLocaleDateString(),
-      focus_time: focusState === 'finished' ? focusTime : 'Did not finish',
+      focus_score: focusNextNumber, // Score is how many they got
       academic_check: weeklyAcademic,
       weight_check: weeklyWeight,
       recovery_score: weeklyRecovery,
@@ -261,11 +291,20 @@ const App = () => {
     await addDoc(collection(db, "weekly_prep"), data);
     syncToSheets(data);
     setSuccessMsg("Week Launched!");
+    
+    // Clear & Complete
+    setWeeklyComplete(true);
+    setWeeklyGoal('');
+    setFocusState('idle');
+    
     setTimeout(() => setSuccessMsg(''), 3000);
     setLoading(false);
   };
 
-  // TAB 4: FOUNDATION SAVE
+  const resetWeekly = () => {
+    setWeeklyComplete(false);
+  };
+
   const saveFoundation = async () => {
     setLoading(true);
     const data = {
@@ -281,28 +320,23 @@ const App = () => {
     setLoading(false);
   };
 
-
-  // --- VIEWS ---
-
   if (authLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
 
-  // LOGIN SCREEN
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
         <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
           <div className="text-center mb-6">
-             {/* LOGO HERE: Make sure 'merrillbluejayslogo.jpg' is in your 'public' folder */}
-             <img src="/merrillbluejayslogo.jpg" alt="Bluejays" className="w-20 h-20 mx-auto mb-4 object-contain rounded-full bg-white p-1" />
-             <h1 className="text-2xl font-extrabold text-white">Merrill Girls Wrestling</h1>
-             <p className="text-pink-500 text-sm font-bold uppercase tracking-widest">My Mind Masters Me</p>
+             <Brain className="w-12 h-12 text-pink-500 mx-auto mb-2" />
+             <h1 className="text-2xl font-extrabold text-white">Merrill Smart Journal</h1>
+             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">My Mind Masters Me</p>
           </div>
           <form onSubmit={handleAuth} className="space-y-4">
             <h2 className="text-white font-bold text-lg">{authView === 'login' ? 'Sign In' : 'New Account'}</h2>
             <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
             <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
             {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
-            <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-pink-900/20">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
+            <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
             <div className="text-center text-xs text-gray-400 mt-4">
               <button type="button" onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="text-pink-400 hover:text-pink-300 font-bold">
                 {authView === 'login' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
@@ -314,27 +348,20 @@ const App = () => {
     );
   }
 
-  // MAIN APP
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
       
-      {/* HEADER */}
       <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg flex justify-between items-center">
-         <div className="flex items-center gap-3">
-           <img src="/merrillbluejayslogo.jpg" alt="Logo" className="w-8 h-8 object-contain rounded-full bg-white p-0.5" />
-           <h1 className="text-lg font-extrabold text-white">Merrill <span className="text-pink-500">Girls Wrestling</span></h1>
-         </div>
+         <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1></div>
          <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
-      {/* SUCCESS POPUP */}
       {successMsg && (
         <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-xl z-50 font-bold animate-in fade-in slide-in-from-top-4 flex items-center gap-2">
           <CheckCircle className="w-5 h-5" /> {successMsg}
         </div>
       )}
 
-      {/* TABS CONTENT */}
       <div className="p-4 max-w-lg mx-auto">
 
         {/* --- TAB 1: DAILY GRIND --- */}
@@ -342,11 +369,55 @@ const App = () => {
           <div className="space-y-6 animate-in fade-in">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Flame className="w-5 h-5 text-orange-500"/> The Daily Grind</h2>
             
+            {dailyComplete ? (
+              <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">You Crushed It!</h3>
+                <p className="text-gray-400 mb-6">Daily journal entry recorded.</p>
+                <button onClick={resetDaily} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto">
+                  <Edit3 className="w-4 h-4"/> Edit / New Entry
+                </button>
+              </div>
+            ) : (
+            <>
+            {/* Mindset Section */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">1. Mindset & Focus</h3>
+               <div className="space-y-3">
+                 <div>
+                   <label className="text-xs text-white block mb-2">Today's Focus Word</label>
+                   <div className="flex flex-wrap gap-2">
+                      {['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(w => (
+                        <button key={w} onClick={() => setDailyFocusWord(w)} className={`px-3 py-1 rounded text-xs border ${dailyFocusWord === w ? 'bg-pink-600 border-pink-500 text-white' : 'bg-gray-700 border-gray-600 text-gray-400'}`}>{w}</button>
+                      ))}
+                   </div>
+                 </div>
+                 {dailyFocusWord && (
+                   <div>
+                     <label className="text-xs text-white block mb-1">Statement: How will I be {dailyFocusWord}?</label>
+                     <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white" value={dailyFocusStatement} onChange={e => setDailyFocusStatement(e.target.value)} />
+                   </div>
+                 )}
+                 <div>
+                   <label className="text-xs text-white block mb-1">Technical Focus (Position)</label>
+                   <select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white" value={dailyTechFocus} onChange={e => setDailyTechFocus(e.target.value)}>
+                     <option value="">Select...</option>
+                     {['Neutral', 'Top', 'Bottom', 'Takedowns', 'Escapes', 'Pinning', 'Defense', 'Scramble', 'Conditioning'].map(o => <option key={o} value={o}>{o}</option>)}
+                   </select>
+                 </div>
+                 <div>
+                   <label className="text-xs text-white block mb-1">Daily Gratitude</label>
+                   <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-16" value={dailyGratitude} onChange={e => setDailyGratitude(e.target.value)} />
+                 </div>
+               </div>
+            </div>
+
             {/* Wellness Section */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">1. Wellness Check</h3>
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">2. Wellness Check</h3>
                
-               {/* Sleep */}
                <div className="grid grid-cols-2 gap-4 mb-4">
                  <div>
                    <label className="text-xs text-gray-500 mb-1 block">Hours Sleep</label>
@@ -362,25 +433,17 @@ const App = () => {
                  </div>
                </div>
 
-               {/* Energy Light */}
                <div className="mb-4">
-                 <label className="text-xs text-gray-500 mb-2 block">Energy Traffic Light</label>
+                 <label className="text-xs text-gray-500 mb-2 block">Energy</label>
                  <div className="flex gap-2">
-                   <button onClick={() => setEnergyColor('green')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'green' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
-                     🟢 Explosive
-                   </button>
-                   <button onClick={() => setEnergyColor('yellow')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'yellow' ? 'bg-yellow-900/50 border-yellow-500 text-yellow-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
-                     🟡 Steady
-                   </button>
-                   <button onClick={() => setEnergyColor('red')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'red' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
-                     🔴 Tired
-                   </button>
+                   <button onClick={() => setEnergyColor('green')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'green' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🟢 High</button>
+                   <button onClick={() => setEnergyColor('yellow')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'yellow' ? 'bg-yellow-900/50 border-yellow-500 text-yellow-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🟡 Steady</button>
+                   <button onClick={() => setEnergyColor('red')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'red' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🔴 Low</button>
                  </div>
                </div>
 
-               {/* Nutrition */}
                <div className="mb-4">
-                 <label className="text-xs text-gray-500 mb-2 block">Nutrition</label>
+                 <label className="text-xs text-gray-500 mb-2 block">Nutrition Checklist</label>
                  <div className="grid grid-cols-2 gap-2">
                    {['Veggies', 'Protein', 'Fruit', 'Grain'].map(item => (
                      <button 
@@ -394,7 +457,6 @@ const App = () => {
                  </div>
                </div>
 
-               {/* Hydration */}
                <div>
                   <label className="text-xs text-gray-500 mb-2 block flex items-center gap-1"><Droplets className="w-3 h-3 text-blue-400"/> Water Bottles</label>
                   <div className="flex items-center gap-4 bg-gray-900 p-2 rounded-lg justify-center">
@@ -407,7 +469,7 @@ const App = () => {
 
             {/* Balance Section */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">2. The 6 Balance Check (1-10)</h3>
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">3. The 6 Balance Check (1-10)</h3>
                <div className="space-y-4">
                  {[
                    { id: 'faith', label: 'Faith / Spiritual', icon: <BookOpen className="w-4 h-4 text-purple-400"/> },
@@ -435,7 +497,7 @@ const App = () => {
 
             {/* Mental Grind */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">3. The Mental Grind</h3>
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">4. The Reflection</h3>
                <div className="space-y-3">
                  <div>
                    <label className="text-xs text-white block mb-1">What is the 1% specific thing I improved today?</label>
@@ -449,6 +511,8 @@ const App = () => {
             </div>
 
             <button onClick={submitDaily} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Daily Log</button>
+            </>
+            )}
           </div>
         )}
 
@@ -456,6 +520,18 @@ const App = () => {
         {activeTab === 'match' && (
           <div className="space-y-6 animate-in fade-in">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
+            
+            {matchComplete ? (
+               <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">Match Recorded</h3>
+                <button onClick={resetMatch} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto">
+                  <Plus className="w-4 h-4"/> Add Another Match
+                </button>
+              </div>
+            ) : (
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Event Name</label>
@@ -489,6 +565,7 @@ const App = () => {
 
               <button onClick={submitMatch} disabled={loading} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg">Log Match</button>
             </div>
+            )}
           </div>
         )}
 
@@ -497,19 +574,30 @@ const App = () => {
           <div className="space-y-6 animate-in fade-in">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Sunday Launch</h2>
             
-            {/* Focus Grid Game */}
+            {weeklyComplete ? (
+              <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4">
+                  <CheckCircle className="w-10 h-10 text-green-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-white mb-2">Ready to Launch!</h3>
+                <button onClick={() => setWeeklyComplete(false)} className="text-gray-400 text-xs underline">Edit Entry</button>
+              </div>
+            ) : (
+             <>
+             {/* Focus Grid Game */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
                <div className="flex justify-between items-center mb-4">
                  <h3 className="text-sm font-bold text-white">1. Concentration Grid</h3>
-                 {focusState === 'playing' && <span className="font-mono text-xl text-yellow-400">{focusTime}s</span>}
+                 {focusState === 'playing' && <span className="font-mono text-xl text-yellow-400">{Math.floor(focusTimeLeft / 60)}:{(focusTimeLeft % 60).toString().padStart(2, '0')}</span>}
                </div>
 
                {focusState === 'idle' ? (
                  <button onClick={startFocus} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto"><Play className="w-4 h-4"/> Start Grid (00-99)</button>
                ) : focusState === 'finished' ? (
                  <div>
-                   <p className="text-2xl font-bold text-white mb-2">Time: {focusTime}s</p>
-                   <button onClick={() => setFocusState('idle')} className="text-gray-400 text-xs underline">Reset</button>
+                   <p className="text-2xl font-bold text-white mb-2">Score: {focusScore}</p>
+                   <p className="text-xs text-gray-400">Timer ran out or you finished!</p>
+                   <button onClick={() => setFocusState('idle')} className="text-gray-400 text-xs underline mt-2">Reset</button>
                  </div>
                ) : (
                  <div>
@@ -547,6 +635,8 @@ const App = () => {
                </div>
                <button onClick={submitWeekly} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">Submit Launch</button>
             </div>
+            </>
+            )}
           </div>
         )}
 
