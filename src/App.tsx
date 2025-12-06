@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, writeBatch, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
@@ -292,16 +292,17 @@ const App = () => {
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
         <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
           <div className="text-center mb-6">
-             <Brain className="w-12 h-12 text-pink-500 mx-auto mb-2" />
-             <h1 className="text-2xl font-extrabold text-white">Merrill Smart Journal</h1>
-             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">My Mind Masters Me</p>
+             {/* LOGO HERE: Make sure 'merrillbluejayslogo.jpg' is in your 'public' folder */}
+             <img src="/merrillbluejayslogo.jpg" alt="Bluejays" className="w-20 h-20 mx-auto mb-4 object-contain rounded-full bg-white p-1" />
+             <h1 className="text-2xl font-extrabold text-white">Merrill Girls Wrestling</h1>
+             <p className="text-pink-500 text-sm font-bold uppercase tracking-widest">My Mind Masters Me</p>
           </div>
           <form onSubmit={handleAuth} className="space-y-4">
             <h2 className="text-white font-bold text-lg">{authView === 'login' ? 'Sign In' : 'New Account'}</h2>
             <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
             <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
             {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
-            <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
+            <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all shadow-lg shadow-pink-900/20">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
             <div className="text-center text-xs text-gray-400 mt-4">
               <button type="button" onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="text-pink-400 hover:text-pink-300 font-bold">
                 {authView === 'login' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
@@ -319,7 +320,10 @@ const App = () => {
       
       {/* HEADER */}
       <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg flex justify-between items-center">
-         <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1></div>
+         <div className="flex items-center gap-3">
+           <img src="/merrillbluejayslogo.jpg" alt="Logo" className="w-8 h-8 object-contain rounded-full bg-white p-0.5" />
+           <h1 className="text-lg font-extrabold text-white">Merrill <span className="text-pink-500">Girls Wrestling</span></h1>
+         </div>
          <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
