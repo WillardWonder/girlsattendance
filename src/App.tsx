@@ -1041,11 +1041,19 @@ const App = () => {
                  const meta = getVideoMetadata(r.url);
                  const isPlaying = playingVideoId === r.id;
                  const isFav = userProfile?.favorites?.includes(r.id);
+                 
+                 // Get thumbnail URL specifically for YouTube
+                 const thumbnailUrl = meta.type === 'youtube' && meta.id 
+                    ? `https://img.youtube.com/vi/${meta.id}/hqdefault.jpg` 
+                    : null;
 
                  return (
                    <div key={r.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 flex flex-col group hover:border-gray-500 transition-colors">
                      {/* Video Player / Thumbnail Area */}
-                     <div className="aspect-video bg-black relative">
+                     <div 
+                        className={`aspect-video bg-black relative ${thumbnailUrl ? 'bg-cover bg-center' : ''}`} 
+                        style={{ backgroundImage: thumbnailUrl && !isPlaying ? `url(${thumbnailUrl})` : 'none' }}
+                     >
                         {isPlaying ? (
                            meta.type === 'youtube' && meta.id ? (
                               <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${meta.id}?autoplay=1`} title={r.title} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
@@ -1059,10 +1067,12 @@ const App = () => {
                            <button onClick={() => {
                               if(meta.type === 'youtube') setPlayingVideoId(r.id);
                               else window.open(r.url, '_blank');
-                           }} className="w-full h-full flex flex-col items-center justify-center relative bg-gray-900 hover:bg-gray-800 transition-colors group">
-                              <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold text-white uppercase ${meta.color}`}>{meta.label}</div>
-                              <Play className="w-12 h-12 text-white opacity-80 group-hover:scale-110 transition-transform"/>
-                              <p className="text-gray-400 text-xs mt-2">Click to Watch</p>
+                           }} className="w-full h-full flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/20 transition-colors group">
+                              {!thumbnailUrl && (
+                                 <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold text-white uppercase ${meta.color}`}>{meta.label}</div>
+                              )}
+                              <Play className="w-12 h-12 text-white opacity-80 group-hover:scale-110 transition-transform drop-shadow-lg"/>
+                              {thumbnailUrl && <div className="absolute inset-0 bg-black/10"></div>}
                            </button>
                         )}
                      </div>
