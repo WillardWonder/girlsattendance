@@ -66,7 +66,7 @@ const App = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
 
   // --- FORUM / DISCUSSION STATE ---
-  // Removed showForum boolean, now using activeTab === 'teamtalk'
+  const [showForum, setShowForum] = useState(false);
   const [activePost, setActivePost] = useState<any>(null);
   const [postComments, setPostComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -913,7 +913,7 @@ const App = () => {
                                <div className={`max-w-[85%] rounded-xl p-3 ${comment.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-gray-700 text-gray-200 rounded-tl-none'}`}>
                                   <p className="text-xs font-bold mb-1 opacity-70">{comment.userName}</p>
                                   <p className="text-sm">{comment.text}</p>
-                               </div>
+                                </div>
                                <span className="text-[9px] text-gray-600 mt-1 px-1">{comment.displayDate}</span>
                             </div>
                          ))
@@ -939,6 +939,23 @@ const App = () => {
           </div>
         )}
         
+        {/* --- TAB: SCHEDULE (New) --- */}
+        {activeTab === 'schedule' && (
+          <div className="space-y-6 animate-in fade-in pb-20">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-purple-500"/> Team Schedule</h2>
+            <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 h-[60vh]">
+                <iframe 
+                    src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&theme=DARK`} 
+                    style={{border: 0}} 
+                    width="100%" 
+                    height="100%" 
+                    frameBorder="0" 
+                    scrolling="no"
+                ></iframe>
+            </div>
+          </div>
+        )}
+
         {/* --- TAB 2: MATCH DAY --- */}
         {activeTab === 'match' && !showForum && (
           <div className="space-y-6 animate-in fade-in">
@@ -1160,10 +1177,11 @@ const App = () => {
 
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto">
          <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
-         <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
-         <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
-         <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
          <button onClick={() => setActiveTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
+         <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
+         <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
+         <button onClick={() => setActiveTab('schedule')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'schedule' ? 'text-pink-500' : 'text-gray-500'}`}><Calendar className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Schedule</span></button>
+         <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
          <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
          <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
       </div>
