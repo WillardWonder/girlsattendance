@@ -7,7 +7,7 @@ import {
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
-  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords
+  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -77,6 +77,7 @@ const App = () => {
   const [identityWords, setIdentityWords] = useState(['', '', '', '', '']);
   const [whyLevels, setWhyLevels] = useState(['', '', '']); // Join, Important, Root
   const [purposeStatement, setPurposeStatement] = useState('');
+  const [showIdentityExamples, setShowIdentityExamples] = useState(false);
 
   // --- TAB 5: CONFIDENCE BANK ---
   const [confidenceDeposits, setConfidenceDeposits] = useState<any[]>([]);
@@ -89,6 +90,7 @@ const App = () => {
         // Load Profile (Foundation)
         const docRef = doc(db, "user_profiles", currentUser.uid);
         const docSnap = await getDoc(docRef);
+        
         if (docSnap.exists()) {
           const data = docSnap.data();
           setUserProfile(data);
@@ -96,8 +98,15 @@ const App = () => {
           if (data.identity) setIdentityWords(data.identity);
           if (data.whys) setWhyLevels(data.whys);
           if (data.purpose) setPurposeStatement(data.purpose);
+
+          // SMART REDIRECT: Only force Foundation tab if they haven't filled out their Identity yet
+          if (!data.identity || data.identity[0] === '') {
+             setActiveTab('foundation');
+          } else {
+             setActiveTab('daily');
+          }
         } else {
-          // No profile? Send to Foundation tab for onboarding
+          // No profile doc at all? Send to Foundation tab
           setActiveTab('foundation');
         }
         // Load Confidence Bank
@@ -533,10 +542,52 @@ const App = () => {
              
              {/* Identity */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">1. My Identity (I am...)</h3>
+               <div className="flex justify-between items-center mb-3">
+                 <h3 className="text-xs font-bold text-gray-400 uppercase">1. My Identity (I am...)</h3>
+                 <button onClick={() => setShowIdentityExamples(!showIdentityExamples)} className="text-xs text-blue-400 font-bold flex items-center gap-1 border border-blue-500/30 px-2 py-1 rounded hover:bg-blue-900/20">
+                   <Lightbulb className="w-3 h-3"/> {showIdentityExamples ? 'Hide Ideas' : 'Need Ideas?'}
+                 </button>
+               </div>
+               
+               {/* Identity Examples Popup */}
+               {showIdentityExamples && (
+                 <div className="bg-gray-900/90 border border-gray-600 p-3 rounded-lg mb-4 text-xs animate-in slide-in-from-top-2">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <strong className="text-pink-400 block mb-1">Physical</strong>
+                        <ul className="text-gray-400 space-y-1 list-disc pl-3">
+                          <li>Strong</li><li>Fast</li><li>Explosive</li><li>Conditioned</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <strong className="text-blue-400 block mb-1">Mental</strong>
+                        <ul className="text-gray-400 space-y-1 list-disc pl-3">
+                          <li>Calm under pressure</li><li>Confident</li><li>Focused</li><li>Unbreakable</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <strong className="text-yellow-400 block mb-1">Character</strong>
+                        <ul className="text-gray-400 space-y-1 list-disc pl-3">
+                          <li>Leader</li><li>Hard Working</li><li>Coachable</li><li>Grateful</li>
+                        </ul>
+                      </div>
+                      <div>
+                        <strong className="text-green-400 block mb-1">Future</strong>
+                        <ul className="text-gray-400 space-y-1 list-disc pl-3">
+                          <li>State Champion</li><li>Pins Specialist</li>
+                        </ul>
+                      </div>
+                    </div>
+                 </div>
+               )}
+
                <div className="space-y-2">
+                 <p className="text-xs text-gray-500 italic mb-2">"Speak it into existence. Who are you?"</p>
                  {identityWords.map((word, i) => (
-                   <input key={i} type="text" placeholder={`I am...`} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} />
+                   <div key={i} className="flex gap-2 items-center">
+                     <span className="text-gray-600 text-xs font-mono">{i+1}.</span>
+                     <input type="text" placeholder={`I am...`} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} />
+                   </div>
                  ))}
                </div>
              </div>
@@ -544,34 +595,34 @@ const App = () => {
              {/* Whys */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">2. Find Your Why</h3>
-               <div className="space-y-3">
+               <div className="space-y-4">
                  <div>
-                   <label className="text-xs text-blue-400 block mb-1">Level 1: Why did you join?</label>
+                   <label className="text-xs text-blue-400 block mb-1 font-bold">Level 1: Why did you join?</label>
                    <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[0]} onChange={e => { const n = [...whyLevels]; n[0] = e.target.value; setWhyLevels(n); }} />
                  </div>
                  <div>
-                   <label className="text-xs text-blue-400 block mb-1">Level 2: Why is that important?</label>
+                   <label className="text-xs text-blue-400 block mb-1 font-bold">Level 2: Why is that important to you?</label>
                    <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[1]} onChange={e => { const n = [...whyLevels]; n[1] = e.target.value; setWhyLevels(n); }} />
                  </div>
                  <div>
-                   <label className="text-xs text-blue-400 block mb-1">Level 3: The Root Cause</label>
+                   <label className="text-xs text-blue-400 block mb-1 font-bold">Level 3: Why does that matter? (Root Cause)</label>
                    <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[2]} onChange={e => { const n = [...whyLevels]; n[2] = e.target.value; setWhyLevels(n); }} />
                  </div>
                </div>
-               <div className="mt-4">
-                 <label className="text-xs text-white font-bold block mb-1">Official Purpose Statement</label>
-                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} />
+               <div className="mt-6 pt-4 border-t border-gray-700">
+                 <label className="text-xs text-white font-bold block mb-1">My Official Wrestling Purpose Statement</label>
+                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" placeholder="I wrestle because..." value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} />
                </div>
              </div>
 
              {/* Values (Read Only) */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 opacity-75">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">3. Team Values</h3>
-               <ul className="text-sm text-gray-300 space-y-2">
-                 <li><b>Consistent:</b> In routines. Team &gt; Self. 1% Better.</li>
-                 <li><b>Persistent:</b> Helping others. Sticking with it.</li>
-                 <li><b>Resilient:</b> Rubber Band Theory. Respond vs React. Opportunity &gt; Obstacle.</li>
-                 <li><b>Relentless:</b> Waking up & Growing. Attacking the day.</li>
+               <ul className="text-sm text-gray-300 space-y-2 list-none">
+                 <li><b className="text-white">Consistent:</b> In routines. Team &gt; Self. 1% Better Daily.</li>
+                 <li><b className="text-white">Persistent:</b> Helping others. Sticking with it.</li>
+                 <li><b className="text-white">Resilient:</b> Rubber Band Theory. Respond vs React. Opportunity &gt; Obstacle.</li>
+                 <li><b className="text-white">Relentless:</b> Waking up & Growing. Attacking the day.</li>
                </ul>
              </div>
 
@@ -594,7 +645,7 @@ const App = () => {
                     {confidenceDeposits.map(d => (
                       <div key={d.id} className="p-4">
                         <div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div>
-                        <div className="text-white text-sm">{d.improvement}</div>
+                        <div className="text-white text-sm font-medium">"{d.improvement}"</div>
                       </div>
                     ))}
                   </div>
