@@ -26,9 +26,10 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 
 // --- SECURITY & ASSETS ---
-const COACH_ACCESS_CODE = "bluejays"; // Shared code for guest coaches
+// Removed hardcoded "bluejays". Now checks for env vars safely without crashing if 'process' is undefined.
+const COACH_ACCESS_CODE = (typeof process !== "undefined" && process.env?.REACT_APP_COACH_CODE) || ""; 
 const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
-const LOGO_URL = "merrill-logo.png"; // REPLACE THIS with your actual uploaded filename (e.g. logo.png)
+const LOGO_URL = "/merrill-logo.png"; // Added slash to reference root file
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -82,7 +83,7 @@ const App = () => {
   const [matchWell, setMatchWell] = useState('');
   const [matchLearn, setMatchLearn] = useState('');
 
-  // --- TAB 3: SUNDAY LAUNCH STATE ---
+  // --- TAB 3: WEEKLY CHECK-IN STATE ---
   const [weeklyComplete, setWeeklyComplete] = useState(false);
   const [weeklyAcademic, setWeeklyAcademic] = useState('No');
   const [weeklyWeight, setWeeklyWeight] = useState('Yes');
@@ -423,7 +424,7 @@ const App = () => {
       weight_check: weeklyWeight, recovery_score: weeklyRecovery, weekly_goal: weeklyGoal
     };
     await addDoc(collection(db, "weekly_prep"), data); syncToSheets(data);
-    setSuccessMsg("Week Launched!"); setWeeklyComplete(true); setWeeklyGoal('');
+    setSuccessMsg("Weekly Log Saved!"); setWeeklyComplete(true); setWeeklyGoal('');
     setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
@@ -703,10 +704,10 @@ const App = () => {
           </div>
         )}
 
-        {/* --- TAB 3: SUNDAY LAUNCH --- */}
-        {activeTab === 'sunday' && (
+        {/* --- TAB 3: WEEKLY CHECK-IN --- */}
+        {activeTab === 'weekly' && (
           <div className="space-y-6 animate-in fade-in">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Sunday Launch</h2>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Weekly Check-In</h2>
             {weeklyComplete ? (
               <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
                 <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
@@ -765,7 +766,7 @@ const App = () => {
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40">
          <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
          <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
-         <button onClick={() => setActiveTab('sunday')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'sunday' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Launch</span></button>
+         <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
          <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
          <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
       </div>
