@@ -355,7 +355,7 @@ const App = () => {
     
     // 1. Trim Inputs (Fixes "400" error due to trailing spaces)
     const emailClean = emailInput.trim();
-    const passClean = passwordInput; // Passwords might intentionally have spaces, so we don't trim middle, but usually trailing is user error. Firebase handles this.
+    const passClean = passwordInput; 
 
     // Client-side Validation
     if(passClean.length < 6) {
@@ -376,7 +376,7 @@ const App = () => {
         await addDoc(collection(db, "roster"), { First_Name: fName, Last_Name: lName, Email: emailClean });
       }
     } catch (err: any) { 
-        console.error("Auth Error Full Object:", err); // Log full error for debugging
+        console.error("Auth Error Full Object:", err); 
         let msg = err.message || "Authentication failed.";
         
         // Map common Firebase errors to user-friendly messages
@@ -384,6 +384,8 @@ const App = () => {
         else if(err.code === 'auth/wrong-password') msg = "Incorrect password.";
         else if(err.code === 'auth/user-not-found') msg = "User not found. Please Sign Up.";
         else if(err.code === 'auth/invalid-email') msg = "Invalid email format.";
+        else if(err.code === 'auth/weak-password') msg = "Password is too weak (min 6 chars).";
+        else if(err.code === 'auth/operation-not-allowed') msg = "Email/Password provider not enabled in Firebase Console.";
         else if(err.code === 'auth/network-request-failed') msg = "Network error. Check connection.";
         else if(err.message.includes("quota")) {
             msg = "Device storage full. Clearing cache... Try again in 5 seconds.";
