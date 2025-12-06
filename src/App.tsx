@@ -1054,25 +1054,27 @@ const App = () => {
                         className={`aspect-video bg-black relative ${thumbnailUrl ? 'bg-cover bg-center' : ''}`} 
                         style={{ backgroundImage: thumbnailUrl && !isPlaying ? `url(${thumbnailUrl})` : 'none' }}
                      >
-                        {isPlaying ? (
+                        {/* LOGIC:
+                           1. If isPlaying = true -> Show YouTube Iframe (autoplay) or Non-YouTube Iframe (source)
+                           2. If isPlaying = false AND it's YouTube -> Show Image Overlay
+                           3. If isPlaying = false AND it's NOT YouTube -> Show Iframe immediately (so it acts as thumb)
+                        */}
+                        
+                        {(isPlaying || meta.type !== 'youtube') ? (
                            meta.type === 'youtube' && meta.id ? (
-                              <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${meta.id}?autoplay=1`} title={r.title} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
+                              <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${meta.id}?autoplay=${isPlaying ? 1 : 0}`} title={r.title} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
                            ) : (
-                              <div className="w-full h-full flex flex-col items-center justify-center text-center p-4">
-                                 <p className="text-gray-400 text-xs mb-2">Opening in new tab...</p>
-                                 <ExternalLink className="w-8 h-8 text-gray-600"/>
-                              </div>
+                              // Non-YouTube: Just render the iframe directly. 
+                              // NOTE: Some sites (IG/TikTok) might block this without specific embed URLs. 
+                              // This is "best effort" per user request.
+                              <iframe className="w-full h-full" src={r.url} title={r.title} frameBorder="0" allowFullScreen></iframe>
                            )
                         ) : (
-                           <button onClick={() => {
-                              if(meta.type === 'youtube') setPlayingVideoId(r.id);
-                              else window.open(r.url, '_blank');
-                           }} className="w-full h-full flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/20 transition-colors group">
-                              {!thumbnailUrl && (
-                                 <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold text-white uppercase ${meta.color}`}>{meta.label}</div>
-                              )}
+                           // YouTube Placeholder Overlay (Click to Play)
+                           <button onClick={() => setPlayingVideoId(r.id)} className="w-full h-full flex flex-col items-center justify-center relative bg-black/40 hover:bg-black/20 transition-colors group">
+                              <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold text-white uppercase ${meta.color}`}>{meta.label}</div>
                               <Play className="w-12 h-12 text-white opacity-80 group-hover:scale-110 transition-transform drop-shadow-lg"/>
-                              {thumbnailUrl && <div className="absolute inset-0 bg-black/10"></div>}
+                              <div className="absolute inset-0 bg-black/10"></div>
                            </button>
                         )}
                      </div>
