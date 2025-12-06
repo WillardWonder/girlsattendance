@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail, browserLocalPersistence, setPersistence } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud
+  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -64,6 +64,17 @@ const App = () => {
   const [resources, setResources] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+
+  // --- FORUM / DISCUSSION STATE ---
+  const [showForum, setShowForum] = useState(false);
+  const [activePost, setActivePost] = useState<any>(null);
+  const [postComments, setPostComments] = useState<any[]>([]);
+  const [newComment, setNewComment] = useState('');
+
+  // --- LIBRARY STATE ---
+  const [libFilterTag, setLibFilterTag] = useState('All');
+  const [libShowFavorites, setLibShowFavorites] = useState(false);
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
 
   // --- TAB 1: DAILY GRIND STATE ---
   const [dailyComplete, setDailyComplete] = useState(false);
@@ -132,6 +143,8 @@ const App = () => {
   const [newAnnouncement, setNewAnnouncement] = useState('');
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoURL, setNewVideoURL] = useState('');
+  const [newVideoTags, setNewVideoTags] = useState('');
+  const [autoAnnounceVideo, setAutoAnnounceVideo] = useState(false);
   
   // Report Filters
   const [reportStartDate, setReportStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
@@ -163,18 +176,41 @@ const App = () => {
     setSearchTerm(student.name || "");
   };
 
+  const handleResetAppData = () => {
+    if(confirm("This will clear cached data to fix loading errors. It will NOT delete your saved journals. Continue?")) {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+    }
+  };
+
   const getVideoMetadata = (url: string) => {
     if (!url) return { type: 'unknown', id: null, label: 'Link' };
     if (url.includes('youtu.be') || url.includes('youtube.com')) {
         const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
         const match = url.match(regExp);
         const id = (match && match[2].length === 11) ? match[2] : null;
-        return { type: 'youtube', id, label: 'YouTube' };
+        return { type: 'youtube', id, label: 'YouTube', color: 'bg-red-600' };
     }
-    if (url.includes('tiktok.com')) return { type: 'tiktok', id: null, label: 'TikTok' };
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return { type: 'facebook', id: null, label: 'Facebook' };
-    if (url.includes('instagram.com')) return { type: 'instagram', id: null, label: 'Instagram' };
-    return { type: 'generic', id: null, label: 'Video' };
+    if (url.includes('tiktok.com')) return { type: 'tiktok', id: null, label: 'TikTok', color: 'bg-black' };
+    if (url.includes('facebook.com') || url.includes('fb.watch')) return { type: 'facebook', id: null, label: 'Facebook', color: 'bg-blue-600' };
+    if (url.includes('instagram.com')) return { type: 'instagram', id: null, label: 'Instagram', color: 'bg-pink-600' };
+    return { type: 'generic', id: null, label: 'Video', color: 'bg-gray-600' };
+  };
+
+  const toggleFavorite = async (videoId: string) => {
+    if (!user) return;
+    const isFav = userProfile?.favorites?.includes(videoId);
+    try {
+        await updateDoc(doc(db, "user_profiles", user.uid), {
+            favorites: isFav ? arrayRemove(videoId) : arrayUnion(videoId)
+        });
+        // Optimistic update
+        const newFavs = isFav 
+            ? (userProfile.favorites || []).filter((id: string) => id !== videoId)
+            : [...(userProfile.favorites || []), videoId];
+        setUserProfile({...userProfile, favorites: newFavs});
+    } catch(e) { console.error("Fav toggle error", e); }
   };
 
   // --- ASYNC DATA ACTIONS ---
@@ -231,6 +267,39 @@ const App = () => {
         body: JSON.stringify(data)
       });
     } catch (e) { console.error("Sheet Sync Error", e); }
+  };
+
+  // --- FORUM ACTIONS ---
+  const loadComments = async (postId: string) => {
+    try {
+      setLoading(true);
+      const q = query(collection(db, "post_comments"), where("postId", "==", postId), orderBy("timestamp", "asc"));
+      const snap = await getDocs(q);
+      setPostComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    } catch(e) { console.error("Comment load error", e); }
+    finally { setLoading(false); }
+  };
+
+  const submitComment = async () => {
+    if (!newComment.trim() || !activePost) return;
+    try {
+      const commentData = {
+        postId: activePost.id,
+        userId: user.uid,
+        userName: getCurrentName(),
+        text: newComment.trim(),
+        timestamp: new Date().toISOString(),
+        displayDate: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'})
+      };
+      await addDoc(collection(db, "post_comments"), commentData);
+      setNewComment('');
+      loadComments(activePost.id); // Reload
+    } catch (e) { console.error("Post comment error", e); }
+  };
+
+  const handleOpenPost = (post: any) => {
+    setActivePost(post);
+    loadComments(post.id);
   };
 
   // --- EFFECTS ---
@@ -471,7 +540,38 @@ const App = () => {
   const handleDeduplicate = async () => { /* preserved */ };
   const handlePreloadedImport = async () => { /* preserved */ };
   const handleAddAnnouncement = async () => { if(!newAnnouncement) return; await addDoc(collection(db, "announcements"), { message: newAnnouncement, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString() }); setNewAnnouncement(''); alert('Posted!'); };
-  const handleAddVideo = async () => { if(!newVideoTitle || !newVideoURL) return; await addDoc(collection(db, "resources"), { title: newVideoTitle, url: newVideoURL, type: 'youtube', timestamp: new Date().toISOString() }); setNewVideoTitle(''); setNewVideoURL(''); alert('Video Added!'); };
+  const handleAddVideo = async () => { 
+    if(!newVideoTitle || !newVideoURL) return; 
+    
+    // Parse tags (comma separated)
+    const tags = newVideoTags.split(',').map(t => t.trim()).filter(t => t);
+
+    // Add Video
+    await addDoc(collection(db, "resources"), { 
+      title: newVideoTitle, 
+      url: newVideoURL, 
+      tags: tags,
+      timestamp: new Date().toISOString() 
+    });
+    
+    // Auto Announce
+    if (autoAnnounceVideo) {
+       await addDoc(collection(db, "announcements"), { 
+         message: `New Video Added to Library: "${newVideoTitle}"`, 
+         timestamp: new Date().toISOString(), 
+         date: new Date().toLocaleDateString() 
+       });
+    }
+
+    setNewVideoTitle(''); 
+    setNewVideoURL(''); 
+    setNewVideoTags('');
+    setAutoAnnounceVideo(false); 
+    alert('Video Added' + (autoAnnounceVideo ? ' & Announced!' : '!')); 
+  };
+
+  // Get Unique Tags
+  const allTags = Array.from(new Set(resources.flatMap(r => r.tags || []))).sort();
 
   if (authLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
 
@@ -613,7 +713,20 @@ const App = () => {
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
               <h3 className="font-bold flex items-center gap-2 mb-3"><Youtube className="w-4 h-4 text-red-400"/> Add Video Resource</h3>
               <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Title" value={newVideoTitle} onChange={e => setNewVideoTitle(e.target.value)} />
-              <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="URL" value={newVideoURL} onChange={e => setNewVideoURL(e.target.value)} />
+              <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="URL (YouTube, TikTok, FB...)" value={newVideoURL} onChange={e => setNewVideoURL(e.target.value)} />
+              <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Tags (comma separated: Takedown, Drill)" value={newVideoTags} onChange={e => setNewVideoTags(e.target.value)} />
+              
+              <div className="flex items-center gap-2 mb-3">
+                <input 
+                  type="checkbox" 
+                  id="autoAnnounce" 
+                  checked={autoAnnounceVideo} 
+                  onChange={(e) => setAutoAnnounceVideo(e.target.checked)}
+                  className="w-4 h-4 rounded bg-gray-900 border-gray-600 text-pink-600 focus:ring-pink-500"
+                />
+                <label htmlFor="autoAnnounce" className="text-xs text-gray-300">Post announcement to Team Talk</label>
+              </div>
+
               <button onClick={handleAddVideo} className="w-full bg-green-600 py-2 rounded text-sm font-bold">Add Video</button>
             </div>
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -659,14 +772,17 @@ const App = () => {
 
       <div className="p-4 max-w-lg mx-auto">
         {/* --- TAB 1: DAILY GRIND --- */}
-        {activeTab === 'daily' && (
+        {activeTab === 'daily' && !showForum && (
           <div className="space-y-6 animate-in fade-in">
             {/* Show Announcement if exists */}
             {announcements.length > 0 && (
               <div className="bg-gradient-to-r from-pink-900/50 to-purple-900/50 p-4 rounded-xl border border-pink-500/30 mb-4">
                 <h3 className="text-pink-300 text-xs font-bold uppercase mb-1 flex items-center gap-2"><Megaphone className="w-3 h-3"/> Latest News</h3>
                 <p className="text-white text-sm">{announcements[0].message}</p>
-                <p className="text-pink-500/50 text-[10px] mt-2 text-right">{announcements[0].date}</p>
+                <div className="flex justify-between items-center mt-3">
+                   <p className="text-pink-500/50 text-[10px]">{announcements[0].date}</p>
+                   <button onClick={() => setShowForum(true)} className="text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"><MessageCircle className="w-3 h-3"/> Team Talk</button>
+                </div>
               </div>
             )}
 
@@ -702,9 +818,76 @@ const App = () => {
             )}
           </div>
         )}
+
+        {/* --- FORUM OVERLAY (Renamed to Team Talk) --- */}
+        {showForum && (
+          <div className="space-y-4 animate-in slide-in-from-bottom-10">
+             <button onClick={() => setShowForum(false)} className="text-xs text-gray-400 mb-2 flex items-center gap-1 hover:text-white"><ChevronDown className="w-4 h-4 rotate-90"/> Back to Dashboard</button>
+             <h2 className="text-xl font-bold text-white flex items-center gap-2"><MessageCircle className="w-5 h-5 text-pink-500"/> Team Talk</h2>
+             
+             {!activePost ? (
+                <div className="space-y-3">
+                   <p className="text-gray-400 text-xs mb-2">Announcements & Discussions</p>
+                   {announcements.map(post => (
+                      <div key={post.id} onClick={() => handleOpenPost(post)} className="bg-gray-800 p-4 rounded-xl border border-gray-700 active:bg-gray-700 transition-colors cursor-pointer">
+                         <div className="flex justify-between items-start mb-2">
+                            <span className="bg-pink-900/50 text-pink-300 text-[10px] px-2 py-1 rounded font-bold uppercase">News</span>
+                            <span className="text-gray-500 text-[10px]">{post.date}</span>
+                         </div>
+                         <p className="text-white text-sm line-clamp-2">{post.message}</p>
+                         <div className="mt-3 flex items-center gap-2 text-xs text-blue-400">
+                            <MessageCircle className="w-3 h-3"/> Reply to post
+                         </div>
+                      </div>
+                   ))}
+                </div>
+             ) : (
+                <div className="bg-gray-800 rounded-xl border border-gray-700 flex flex-col h-[70vh]">
+                   {/* Active Post Header */}
+                   <div className="p-4 border-b border-gray-700 bg-gray-800/50 sticky top-0 z-10 rounded-t-xl">
+                      <button onClick={() => setActivePost(null)} className="text-xs text-gray-400 mb-2 flex items-center gap-1"><ChevronDown className="w-3 h-3 rotate-90"/> Back to list</button>
+                      <p className="text-white text-sm font-medium">{activePost.message}</p>
+                      <p className="text-xs text-gray-500 mt-1">{activePost.date}</p>
+                   </div>
+                   
+                   {/* Comments List */}
+                   <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                      {postComments.length === 0 ? (
+                         <div className="text-center text-gray-600 text-xs py-8">No comments yet. Be the first!</div>
+                      ) : (
+                         postComments.map(comment => (
+                            <div key={comment.id} className={`flex flex-col ${comment.userId === user.uid ? 'items-end' : 'items-start'}`}>
+                               <div className={`max-w-[85%] rounded-xl p-3 ${comment.userId === user.uid ? 'bg-blue-600 text-white rounded-tr-none' : 'bg-gray-700 text-gray-200 rounded-tl-none'}`}>
+                                  <p className="text-xs font-bold mb-1 opacity-70">{comment.userName}</p>
+                                  <p className="text-sm">{comment.text}</p>
+                               </div>
+                               <span className="text-[9px] text-gray-600 mt-1 px-1">{comment.displayDate}</span>
+                            </div>
+                         ))
+                      )}
+                   </div>
+
+                   {/* Input Area */}
+                   <div className="p-3 border-t border-gray-700 bg-gray-900 rounded-b-xl flex gap-2">
+                      <input 
+                        type="text" 
+                        className="flex-1 bg-gray-800 border border-gray-600 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                        placeholder="Type a reply..."
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && submitComment()}
+                      />
+                      <button onClick={submitComment} disabled={!newComment.trim()} className="bg-blue-600 text-white p-2 rounded-full disabled:opacity-50 disabled:cursor-not-allowed">
+                         <Send className="w-4 h-4"/>
+                      </button>
+                   </div>
+                </div>
+             )}
+          </div>
+        )}
         
         {/* --- TAB 2: MATCH DAY --- */}
-        {activeTab === 'match' && (
+        {activeTab === 'match' && !showForum && (
           <div className="space-y-6 animate-in fade-in">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
             {matchComplete ? (
@@ -826,28 +1009,84 @@ const App = () => {
            </div>
         )}
 
-        {/* --- TAB 6: LIBRARY (New) --- */}
+        {/* --- TAB 6: LIBRARY (Updated Grid Layout) --- */}
         {activeTab === 'library' && (
-          <div className="space-y-6 animate-in fade-in">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Video className="w-5 h-5 text-purple-500"/> Video Library</h2>
-            <div className="space-y-4">
-              {resources.map(r => {
+          <div className="space-y-6 animate-in fade-in pb-20">
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                 <h2 className="text-xl font-bold text-white flex items-center gap-2"><Video className="w-5 h-5 text-purple-500"/> Video Library</h2>
+                 {/* Filter Controls */}
+                 <div className="flex gap-2">
+                    <button onClick={() => setLibShowFavorites(!libShowFavorites)} className={`p-2 rounded-lg ${libShowFavorites ? 'bg-pink-600 text-white' : 'bg-gray-800 text-gray-400'}`}>
+                       <Heart className={`w-4 h-4 ${libShowFavorites ? 'fill-current' : ''}`} />
+                    </button>
+                 </div>
+              </div>
+
+              {/* Tag Filters */}
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
+                 <button onClick={() => setLibFilterTag('All')} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${libFilterTag === 'All' ? 'bg-white text-gray-900 border-white' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>All</button>
+                 {allTags.map(tag => (
+                    <button key={tag} onClick={() => setLibFilterTag(tag)} className={`whitespace-nowrap px-3 py-1 rounded-full text-xs font-bold border ${libFilterTag === tag ? 'bg-white text-gray-900 border-white' : 'bg-gray-800 text-gray-400 border-gray-700'}`}>{tag}</button>
+                 ))}
+              </div>
+            </div>
+
+            {/* Video Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {resources
+                .filter(r => libFilterTag === 'All' || (r.tags && r.tags.includes(libFilterTag)))
+                .filter(r => !libShowFavorites || (userProfile?.favorites?.includes(r.id)))
+                .map(r => {
                  const meta = getVideoMetadata(r.url);
+                 const isPlaying = playingVideoId === r.id;
+                 const isFav = userProfile?.favorites?.includes(r.id);
+
                  return (
-                   <div key={r.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
-                     {meta.type === 'youtube' && meta.id ? (
-                        <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${meta.id}`} title={r.title} frameBorder="0" allowFullScreen></iframe>
-                     ) : (
-                        <div className="h-32 bg-gray-900 flex items-center justify-center"><Video className="w-8 h-8 text-gray-600"/></div>
-                     )}
-                     <div className="p-3">
-                       <h3 className="font-bold text-white text-sm">{r.title}</h3>
-                       <a href={r.url} target="_blank" rel="noreferrer" className="text-xs text-blue-400 flex items-center gap-1 mt-1"><ExternalLink className="w-3 h-3"/> Open Link</a>
+                   <div key={r.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 flex flex-col group hover:border-gray-500 transition-colors">
+                     {/* Video Player / Thumbnail Area */}
+                     <div className="aspect-video bg-black relative">
+                        {isPlaying ? (
+                           meta.type === 'youtube' && meta.id ? (
+                              <iframe className="w-full h-full" src={`https://www.youtube.com/embed/${meta.id}?autoplay=1`} title={r.title} frameBorder="0" allow="autoplay; encrypted-media" allowFullScreen></iframe>
+                           ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center text-center p-4">
+                                 <p className="text-gray-400 text-xs mb-2">Opening in new tab...</p>
+                                 <ExternalLink className="w-8 h-8 text-gray-600"/>
+                              </div>
+                           )
+                        ) : (
+                           <button onClick={() => {
+                              if(meta.type === 'youtube') setPlayingVideoId(r.id);
+                              else window.open(r.url, '_blank');
+                           }} className="w-full h-full flex flex-col items-center justify-center relative bg-gray-900 hover:bg-gray-800 transition-colors group">
+                              <div className={`absolute top-2 right-2 px-2 py-1 rounded text-[10px] font-bold text-white uppercase ${meta.color}`}>{meta.label}</div>
+                              <Play className="w-12 h-12 text-white opacity-80 group-hover:scale-110 transition-transform"/>
+                              <p className="text-gray-400 text-xs mt-2">Click to Watch</p>
+                           </button>
+                        )}
+                     </div>
+
+                     {/* Info Area */}
+                     <div className="p-3 flex-1 flex flex-col">
+                       <div className="flex justify-between items-start mb-2">
+                          <h3 className="font-bold text-white text-sm line-clamp-2 leading-tight">{r.title}</h3>
+                          <button onClick={() => toggleFavorite(r.id)} className="text-gray-400 hover:text-pink-500 transition-colors ml-2">
+                             <Heart className={`w-4 h-4 ${isFav ? 'fill-pink-500 text-pink-500' : ''}`} />
+                          </button>
+                       </div>
+                       
+                       {/* Tags */}
+                       <div className="mt-auto flex flex-wrap gap-1">
+                          {r.tags && r.tags.map((tag: string) => (
+                             <span key={tag} className="text-[9px] bg-gray-700 text-gray-300 px-1.5 py-0.5 rounded">{tag}</span>
+                          ))}
+                       </div>
                      </div>
                    </div>
                  );
               })}
-              {resources.length === 0 && <p className="text-gray-500 text-center text-sm">No videos added yet.</p>}
+              {resources.length === 0 && <p className="text-gray-500 text-center text-sm col-span-full py-10">No videos found.</p>}
             </div>
           </div>
         )}
