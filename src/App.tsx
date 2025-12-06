@@ -24,7 +24,10 @@ const firebaseConfig = {
 
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
-const COACH_PASSWORD = "bluejays";
+
+// --- SECURITY ---
+const COACH_ACCESS_CODE = "bluejays"; // Shared code for guest coaches
+const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -109,6 +112,7 @@ const App = () => {
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any[]>([]);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
+  const [showCoachLoginModal, setShowCoachLoginModal] = useState(false);
   const [coachPassInput, setCoachPassInput] = useState('');
   const [csvData, setCsvData] = useState('');
   const [newStudentName, setNewStudentName] = useState('');
@@ -263,6 +267,12 @@ const App = () => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
+        // Auto-detect coach by email
+        if(currentUser.email && APPROVED_COACH_EMAILS.includes(currentUser.email)) {
+             setAppMode('coach');
+             setIsCoachAuthenticated(true);
+        }
+
         try {
           const docRef = doc(db, "user_profiles", currentUser.uid);
           const docSnap = await getDoc(docRef);
@@ -399,7 +409,18 @@ const App = () => {
     setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
-  const unlockCoach = (e: React.FormEvent) => { e.preventDefault(); if(passwordInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setPasswordInput(''); } else { alert('Wrong Password'); } };
+  const unlockCoach = (e: React.FormEvent) => { 
+      e.preventDefault(); 
+      if(passwordInput === COACH_ACCESS_CODE) { 
+          setIsCoachAuthenticated(true); 
+          setAppMode('coach');
+          setShowCoachLoginModal(false);
+          setPasswordInput(''); 
+      } else { 
+          alert('Wrong Code'); 
+      } 
+  };
+
   const handleDeleteCheckIn = async (id: string) => { if(!confirm(`Delete?`)) return; await deleteDoc(doc(db, "attendance", id)); const today = new Date().toLocaleDateString(); const attQ = query(collection(db, "attendance"), where("date", "==", today)); const attSnap = await getDocs(attQ); setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()}))); };
   const handleCopyForSheets = (date: string) => { const records = historyRecords.filter(r => r.date === date).sort((a,b) => String(a.name).localeCompare(String(b.name))); let text = "Name\tWeight\tTime\tNotes\n"; records.forEach(r => { text += `${r.name}\t${r.weight}\t${r.time}\t${r.notes || ''}\n`; }); navigator.clipboard.writeText(text).then(() => { setCopiedDate(date); setTimeout(() => setCopiedDate(null), 2000); }); };
   const handleGenerateReport = async () => { alert("Report generation triggered"); };
@@ -412,8 +433,8 @@ const App = () => {
 
   if (authLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
 
-  // 1. LOGIN SCREEN
-  if (!user) {
+  // 1. LOGIN SCREEN (Only if NOT authenticated as coach AND not logged in)
+  if (!user && !isCoachAuthenticated) {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
         <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
@@ -426,15 +447,19 @@ const App = () => {
             <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
             <div className="text-center text-xs text-gray-400 mt-4"><button type="button" onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="text-pink-400 hover:text-pink-300 font-bold">{authView === 'login' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}</button></div>
           </form>
-          <div className="mt-8 pt-8 border-t border-gray-700"><button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button></div>
+          <div className="mt-8 pt-8 border-t border-gray-700"><button onClick={() => { setShowCoachLoginModal(true); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button></div>
         </div>
-        {isCoachAuthenticated && !user?.email && (
-             <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
+        
+        {/* COACH MODAL */}
+        {showCoachLoginModal && (
+             <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 animate-in fade-in">
                  <div className="bg-gray-800 p-8 rounded-xl w-full max-w-sm relative">
-                    <button onClick={() => { setIsCoachAuthenticated(false); }} className="absolute top-4 right-4 text-gray-400"><XCircle/></button>
-                    <h2 className="text-xl font-bold text-white mb-4">Coach Password</h2>
-                    <input type="password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4" placeholder="••••••••" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-                    <button onClick={unlockCoach} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Access</button>
+                    <button onClick={() => { setShowCoachLoginModal(false); }} className="absolute top-4 right-4 text-gray-400 hover:text-white"><XCircle className="w-6 h-6"/></button>
+                    <h2 className="text-xl font-bold text-white mb-4 text-center">Coach Access</h2>
+                    <form onSubmit={unlockCoach}>
+                        <input type="password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4 text-center tracking-widest" placeholder="ACCESS CODE" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
+                        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg transition-all">Enter Dashboard</button>
+                    </form>
                  </div>
              </div>
         )}
@@ -442,31 +467,13 @@ const App = () => {
     );
   }
 
-  // 2. COACH LOGIN (Authenticated but requesting coach access)
-  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
-        <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center">
-          <Lock className="w-12 h-12 text-pink-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Coach Access</h2>
-          <form onSubmit={unlockCoach}>
-            <input type="password" placeholder="Password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4 text-center"
-              value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-            <button className="w-full bg-pink-600 text-white font-bold py-3 rounded-lg">Unlock</button>
-          </form>
-          <button onClick={() => setAppMode('athlete')} className="mt-6 text-gray-500 text-sm">Back to Athlete View</button>
-        </div>
-      </div>
-    );
-  }
-
-  // 3. COACH DASHBOARD
+  // 2. COACH DASHBOARD
   if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-xl font-bold">Coach Dashboard</h1>
-          <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); }} className="text-xs bg-red-900/50 px-3 py-1 rounded">Exit</button>
+          <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); setShowCoachLoginModal(false); }} className="text-xs bg-red-900/50 hover:bg-red-900/80 px-3 py-1 rounded transition-colors">Exit</button>
         </div>
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {['live', 'content', 'history', 'roster'].map(t => (
