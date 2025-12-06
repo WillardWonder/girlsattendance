@@ -7,7 +7,7 @@ import {
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
-  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb
+  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Users
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -87,30 +87,34 @@ const App = () => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Load Profile (Foundation)
-        const docRef = doc(db, "user_profiles", currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setUserProfile(data);
-          // Pre-fill foundation form
-          if (data.identity) setIdentityWords(data.identity);
-          if (data.whys) setWhyLevels(data.whys);
-          if (data.purpose) setPurposeStatement(data.purpose);
+        try {
+          // Load Profile (Foundation)
+          const docRef = doc(db, "user_profiles", currentUser.uid);
+          const docSnap = await getDoc(docRef);
+          
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserProfile(data);
+            // Pre-fill foundation form
+            if (data.identity) setIdentityWords(data.identity);
+            if (data.whys) setWhyLevels(data.whys);
+            if (data.purpose) setPurposeStatement(data.purpose);
 
-          // SMART REDIRECT: Only force Foundation tab if they haven't filled out their Identity yet
-          if (!data.identity || data.identity[0] === '') {
-             setActiveTab('foundation');
+            // SMART REDIRECT: Only force Foundation tab if they haven't filled out their Identity yet
+            if (!data.identity || data.identity[0] === '') {
+               setActiveTab('foundation');
+            } else {
+               setActiveTab('daily');
+            }
           } else {
-             setActiveTab('daily');
+            // No profile doc at all? Send to Foundation tab
+            setActiveTab('foundation');
           }
-        } else {
-          // No profile doc at all? Send to Foundation tab
-          setActiveTab('foundation');
+          // Load Confidence Bank
+          loadConfidenceBank(currentUser.uid);
+        } catch (e) {
+          console.error("Profile load error:", e);
         }
-        // Load Confidence Bank
-        loadConfidenceBank(currentUser.uid);
       }
       setAuthLoading(false);
     });
@@ -118,14 +122,21 @@ const App = () => {
   }, []);
 
   const loadConfidenceBank = async (uid: string) => {
-    const q = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(50));
-    const snap = await getDocs(q);
-    const deposits = snap.docs.map(d => ({ 
-      id: d.id, 
-      date: d.data().date, 
-      improvement: d.data().mentalImprovement 
-    })).filter(d => d.improvement); // Only show entries with text
-    setConfidenceDeposits(deposits);
+    try {
+      const q = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(50));
+      const snap = await getDocs(q);
+      const deposits = snap.docs.map(d => ({ 
+        id: d.id, 
+        date: d.data().date, 
+        improvement: d.data().mentalImprovement 
+      })).filter(d => d.improvement); // Only show entries with text
+      setConfidenceDeposits(deposits);
+    } catch (e: any) {
+      if (e.code === 'failed-precondition') {
+        console.warn("INDEX MISSING: Check Firebase Console to create index for daily_logs");
+      }
+      console.error("Confidence Bank Load Error", e);
+    }
   };
 
   // --- SYNC TO GOOGLE SHEETS ---
