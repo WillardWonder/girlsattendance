@@ -25,9 +25,10 @@ const firebaseConfig = {
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 
-// --- SECURITY ---
+// --- SECURITY & ASSETS ---
 const COACH_ACCESS_CODE = "bluejays"; // Shared code for guest coaches
 const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
+const LOGO_URL = "merrill-logo.png"; // REPLACE THIS with your actual uploaded filename (e.g. logo.png)
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -438,7 +439,13 @@ const App = () => {
     return (
       <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
         <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
-          <div className="text-center mb-6"><Brain className="w-12 h-12 text-pink-500 mx-auto mb-2" /><h1 className="text-2xl font-extrabold text-white">Merrill Smart Journal</h1><p className="text-pink-400 text-sm font-bold uppercase tracking-widest mb-6">My Mind Masters Me</p></div>
+          <div className="text-center mb-6">
+            {LOGO_URL ? (
+                <img src={LOGO_URL} alt="Team Logo" className="w-24 h-24 mx-auto mb-4 object-contain" />
+            ) : (
+                <Brain className="w-12 h-12 text-pink-500 mx-auto mb-2" />
+            )}
+            <h1 className="text-2xl font-extrabold text-white">Merrill Smart Journal</h1><p className="text-pink-400 text-sm font-bold uppercase tracking-widest mb-6">My Mind Masters Me</p></div>
           <form onSubmit={handleAuth} className="space-y-4">
             <h2 className="text-white font-bold text-lg">{authView === 'login' ? 'Sign In' : 'New Account'}</h2>
             <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
@@ -472,7 +479,10 @@ const App = () => {
     return (
       <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-bold">Coach Dashboard</h1>
+          <div className="flex items-center gap-3">
+             {LOGO_URL && <img src={LOGO_URL} className="w-10 h-10 object-contain" alt="Logo"/>}
+             <h1 className="text-xl font-bold">Coach Dashboard</h1>
+          </div>
           <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); setShowCoachLoginModal(false); }} className="text-xs bg-red-900/50 hover:bg-red-900/80 px-3 py-1 rounded transition-colors">Exit</button>
         </div>
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
@@ -597,7 +607,10 @@ const App = () => {
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
       <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg flex justify-between items-center">
-         <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getCurrentName().split(' ')[1] || 'Athlete'}!</p></div>
+         <div className="flex items-center gap-2">
+             {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
+             <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getCurrentName().split(' ')[1] || 'Athlete'}!</p></div>
+         </div>
          <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
