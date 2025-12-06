@@ -66,7 +66,7 @@ const App = () => {
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
 
   // --- FORUM / DISCUSSION STATE ---
-  const [showForum, setShowForum] = useState(false);
+  // Removed showForum boolean, now using activeTab === 'teamtalk'
   const [activePost, setActivePost] = useState<any>(null);
   const [postComments, setPostComments] = useState<any[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -815,7 +815,7 @@ const App = () => {
                 <p className="text-white text-sm">{announcements[0].message}</p>
                 <div className="flex justify-between items-center mt-3">
                    <p className="text-pink-500/50 text-[10px]">{announcements[0].date}</p>
-                   <button onClick={() => setShowForum(true)} className="text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"><MessageCircle className="w-3 h-3"/> Team Talk</button>
+                   <button onClick={() => setActiveTab('teamtalk')} className="text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"><MessageCircle className="w-3 h-3"/> Team Talk</button>
                 </div>
               </div>
             )}
@@ -836,7 +836,27 @@ const App = () => {
                  <div><label className="text-xs text-gray-500 mb-1 block">Weight</label><input type="number" step="0.1" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white font-mono" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" /></div>
                  <div><label className="text-xs text-gray-500 mb-1 block">Skin Check</label><div className="flex bg-gray-900 rounded border border-gray-600 overflow-hidden"><button onClick={() => setSkinCheck(true)} className={`flex-1 py-2 text-xs font-bold ${skinCheck ? 'bg-green-600 text-white' : 'text-gray-400'}`}>Pass</button><button onClick={() => setSkinCheck(false)} className={`flex-1 py-2 text-xs font-bold ${!skinCheck ? 'bg-red-600 text-white' : 'text-gray-400'}`}>Fail</button></div></div>
                </div>
-               {/* Wellness & Energy & Nutrition - Condensed for brevity but fully functional */}
+               
+               {/* Nutrition & Hydration */}
+               <div className="mb-4">
+                  <label className="text-xs text-gray-500 mb-2 block">Nutrition (Today)</label>
+                  <div className="flex gap-1 mb-3">
+                     {['veggies', 'protein', 'fruit', 'grain'].map(type => (
+                       <button key={type} onClick={() => setNutrition({ ...nutrition, [type]: !nutrition[type as keyof typeof nutrition] })} className={`flex-1 py-2 rounded text-[10px] font-bold uppercase border ${nutrition[type as keyof typeof nutrition] ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
+                         {type}
+                       </button>
+                     ))}
+                  </div>
+                  <label className="text-xs text-gray-500 mb-1 block">Hydration (Cups)</label>
+                  <div className="flex items-center gap-3">
+                     <button onClick={() => setHydration(h => Math.max(0, h-1))} className="bg-gray-700 w-8 h-8 rounded flex items-center justify-center">-</button>
+                     <span className="font-bold text-white text-lg w-8 text-center">{hydration}</span>
+                     <button onClick={() => setHydration(h => h+1)} className="bg-gray-700 w-8 h-8 rounded flex items-center justify-center">+</button>
+                     <span className="text-xs text-blue-400 ml-2"><Droplets className="w-3 h-3 inline"/> Water</span>
+                  </div>
+               </div>
+
+               {/* Wellness & Energy */}
                <div className="mb-4"><label className="text-xs text-gray-500 mb-2 block">Energy</label><div className="flex gap-2"><button onClick={() => setEnergyColor('green')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'green' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🟢 High</button><button onClick={() => setEnergyColor('yellow')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'yellow' ? 'bg-yellow-900/50 border-yellow-500 text-yellow-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🟡 Steady</button><button onClick={() => setEnergyColor('red')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'red' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>🔴 Low</button></div></div>
             </div>
             {/* Mindset */}
@@ -853,10 +873,9 @@ const App = () => {
           </div>
         )}
 
-        {/* --- FORUM OVERLAY (Renamed to Team Talk) --- */}
-        {showForum && (
-          <div className="space-y-4 animate-in slide-in-from-bottom-10">
-             <button onClick={() => setShowForum(false)} className="text-xs text-gray-400 mb-2 flex items-center gap-1 hover:text-white"><ChevronDown className="w-4 h-4 rotate-90"/> Back to Dashboard</button>
+        {/* --- TAB: TEAM TALK --- */}
+        {activeTab === 'teamtalk' && (
+          <div className="space-y-4 animate-in fade-in pb-20">
              <h2 className="text-xl font-bold text-white flex items-center gap-2"><MessageCircle className="w-5 h-5 text-pink-500"/> Team Talk</h2>
              
              {!activePost ? (
@@ -1141,10 +1160,11 @@ const App = () => {
 
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto">
          <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
-         <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
          <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
          <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
          <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
+         <button onClick={() => setActiveTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
+         <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
          <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
       </div>
     </div>
