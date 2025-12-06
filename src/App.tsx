@@ -26,11 +26,9 @@ const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 
 // --- SECURITY & ASSETS ---
-// Checks for environment variable or defaults to empty string (no hardcoded password)
-const COACH_ACCESS_CODE = (typeof process !== "undefined" && process.env?.REACT_APP_COACH_CODE) || ""; 
+const COACH_ACCESS_CODE = "bluejays"; // Hardcoded access code
 const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
-// Pointing to the raw GitHub image content to ensure it loads
-const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendance/main/merrill-logo.png";
+const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendance/main/merrill-logo.png"; // GitHub raw link
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -385,7 +383,7 @@ const App = () => {
         else if(err.code === 'auth/user-not-found') msg = "User not found. Please Sign Up.";
         else if(err.code === 'auth/invalid-email') msg = "Invalid email format.";
         else if(err.code === 'auth/weak-password') msg = "Password is too weak (min 6 chars).";
-        else if(err.code === 'auth/operation-not-allowed') msg = "Email/Password provider not enabled in Firebase Console.";
+        else if(err.code === 'auth/operation-not-allowed') msg = "Sign-up is disabled in Firebase Console.";
         else if(err.code === 'auth/network-request-failed') msg = "Network error. Check connection.";
         else if(err.message.includes("quota")) {
             msg = "Device storage full. Clearing cache... Try again in 5 seconds.";
