@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
-  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus
+  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
+  XCircle, AlertTriangle, UploadCloud
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -129,6 +130,13 @@ const App = () => {
   const getCurrentName = () => {
     if (userProfile && userProfile.First_Name) return `${userProfile.Last_Name}, ${userProfile.First_Name}`;
     return user?.email || "Athlete";
+  };
+
+  const getAbsentStudents = () => {
+    // Basic implementation: Roster minus Today's Attendance
+    const presentIds = new Set(todaysAttendance.map(a => a.studentId || a.uid));
+    const absent = roster.filter(r => !presentIds.has(r.id));
+    return absent;
   };
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
