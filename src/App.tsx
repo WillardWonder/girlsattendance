@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, writeBatch, doc, where, deleteDoc, limit, setDoc } from 'firebase/firestore';
 import { 
   Search, CheckCircle, Scale, AlertCircle, UserPlus, ClipboardList, UploadCloud, Users, 
-  Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, Unlock, 
+  Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, 
   History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
-  CloudLightning, Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
-  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, KeyRound, Mail,
+  Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
+  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, 
   Utensils, Droplets, Swords
 } from 'lucide-react';
-
-// --- CONFIGURATION (HARDCODED TO FIX BUILD ERROR) ---
 
 const firebaseConfig = {
   apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
@@ -23,39 +21,36 @@ const firebaseConfig = {
   measurementId: "G-CVY2FGY8L2"
 };
 
-// Hardcoded URLs to ensure compatibility with the build environment
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
 const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 const COACH_PASSWORD = "bluejays";
 
-const ALLOWED_DOMAINS = ["@mapsedu.org", "@maps.k12.wi.us"];
-
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
-// --- PRELOADED DATA ---
-const PRELOADED_ROSTER = [];
-
 const App = () => {
-  // Auth State
   const [user, setUser] = useState<any>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [nameInput, setNameInput] = useState(''); 
   
-  // App State
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [onboardingStep, setOnboardingStep] = useState(1);
+  const [onboardingData, setOnboardingData] = useState({
+    firstName: '', lastName: '', grade: '', birthDate: '', parentName: '', parentPhone: '',
+    parentEmail: '', emergencyContact: '', emergencyPhone: '', medicalConditions: '', allergies: '',
+    experience: 'beginner', goals: '', shirtSize: 'M', weight: '', agreedToTerms: false
+  });
+  
   const [activeTab, setActiveTab] = useState('checkin');
   const [appMode, setAppMode] = useState<'athlete' | 'coach'>('athlete');
   const [roster, setRoster] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [resources, setResources] = useState<any[]>([]);
   
-  // Check-In Form State
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
   const [weight, setWeight] = useState('');
@@ -66,7 +61,6 @@ const App = () => {
   const [checkInSuccess, setCheckInSuccess] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
 
-  // Journal State (Expanded)
   const [journalGratitude, setJournalGratitude] = useState('');
   const [focusWord, setFocusWord] = useState('');
   const [focusStatement, setFocusStatement] = useState('');
@@ -79,53 +73,34 @@ const App = () => {
   const [moodLevel, setMoodLevel] = useState(3);
   const [journalSuccess, setJournalSuccess] = useState(false);
 
-  // Focus Game State
   const [focusState, setFocusState] = useState<'idle' | 'playing' | 'finished'>('idle');
   const [focusGrid, setFocusGrid] = useState<number[]>([]);
   const [focusNextNumber, setFocusNextNumber] = useState(0);
-  const [focusTimeLeft, setFocusTimeLeft] = useState(120); // 2 minutes
+  const [focusTimeLeft, setFocusTimeLeft] = useState(120);
   const [focusScore, setFocusScore] = useState(0);
 
-  // Stats View State
   const [statsStudent, setStatsStudent] = useState<any>(null);
   const [studentHistory, setStudentHistory] = useState<any[]>([]);
 
-  // Admin State
   const [adminTab, setAdminTab] = useState('live'); 
   const [todaysAttendance, setTodaysAttendance] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any[]>([]);
   const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
-  const [coachPassInput, setCoachPassInput] = useState('');
-  const [csvData, setCsvData] = useState('');
-  const [newStudentName, setNewStudentName] = useState('');
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [copiedDate, setCopiedDate] = useState<string | null>(null);
   const [importStatus, setImportStatus] = useState('');
   const [permissionError, setPermissionError] = useState(false);
+  const [csvData, setCsvData] = useState('');
   
-  // Report Filters
   const [reportStartDate, setReportStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
   const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
   const [reportStudentFilter, setReportStudentFilter] = useState('');
   const [reportGradeFilter, setReportGradeFilter] = useState('');
   
-  // Content Management Inputs
   const [newAnnouncement, setNewAnnouncement] = useState('');
   const [newVideoTitle, setNewVideoTitle] = useState('');
   const [newVideoURL, setNewVideoURL] = useState('');
-
-  // --- DEFINED FUNCTIONS ---
-
-  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
-    setSelectedStudent(null); 
-  };
-
-  const selectStudent = (student: any) => {
-    setSelectedStudent(student);
-    setSearchTerm(student.name || "");
-  };
 
   const getVideoMetadata = (url: string) => {
     if (!url) return { type: 'unknown', id: null, label: 'Link' };
@@ -136,16 +111,12 @@ const App = () => {
         return { type: 'youtube', id, label: 'YouTube' };
     }
     if (url.includes('tiktok.com')) return { type: 'tiktok', id: null, label: 'TikTok' };
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return { type: 'facebook', id: null, label: 'Facebook' };
-    if (url.includes('instagram.com')) return { type: 'instagram', id: null, label: 'Instagram' };
     return { type: 'generic', id: null, label: 'Video' };
   };
 
-  // --- DATA LOADING ---
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Roster
         const rosterQ = query(collection(db, "roster"), orderBy("Last_Name"));
         const rosterSnap = await getDocs(rosterQ);
         const loadedRoster = rosterSnap.docs.map(doc => {
@@ -156,12 +127,10 @@ const App = () => {
         });
         setRoster(loadedRoster);
 
-        // Announcements
         const newsQ = query(collection(db, "announcements"), orderBy("timestamp", "desc"), limit(10));
         const newsSnap = await getDocs(newsQ);
         setAnnouncements(newsSnap.docs.map(d => ({id: d.id, ...d.data()})));
 
-        // Resources
         const resQ = query(collection(db, "resources"), orderBy("timestamp", "desc"));
         const resSnap = await getDocs(resQ);
         setResources(resSnap.docs.map(d => ({id: d.id, ...d.data()})));
@@ -176,7 +145,6 @@ const App = () => {
     fetchData();
   }, []);
 
-  // Admin Data Fetch
   useEffect(() => {
     if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
       const fetchAdminData = async () => {
@@ -194,7 +162,6 @@ const App = () => {
     }
   }, [appMode, isCoachAuthenticated, adminTab, user]);
 
-  // SECURITY FIX: Lock Coach Mode when leaving
   useEffect(() => {
     if (appMode === 'athlete') {
       setIsCoachAuthenticated(false);
@@ -226,20 +193,31 @@ const App = () => {
     }
   };
 
-  // --- AUTH LISTENER ---
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       setAuthLoading(false);
       if (currentUser) {
         const match = roster.find(r => r.email && r.email.toLowerCase() === currentUser.email?.toLowerCase());
-        if (match) setSelectedStudent(match);
+        if (match) {
+          setSelectedStudent(match);
+          if (!match.First_Name || match.First_Name === 'Athlete' || !match.onboardingComplete) {
+            setShowOnboarding(true);
+            setOnboardingData(prev => ({
+              ...prev,
+              firstName: match.First_Name || '',
+              lastName: match.Last_Name || '',
+              grade: match.grade || '',
+            }));
+          }
+        } else {
+          setShowOnboarding(true);
+        }
       }
     });
     return () => unsubscribe();
   }, [roster]);
 
-  // --- FOCUS GAME LOGIC ---
   useEffect(() => {
     let timer: any;
     if (focusState === 'playing' && focusTimeLeft > 0) {
@@ -291,35 +269,13 @@ const App = () => {
     }
   };
 
-  // --- ACTIONS ---
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
     try {
       await signInWithEmailAndPassword(auth, emailInput, passwordInput);
     } catch (err: any) {
-      if ((err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') && passwordInput.toLowerCase() === 'bluejays') {
-        await handleFirstTimeRegistration();
-      } else {
-        setError('Invalid email or password.');
-        setLoading(false);
-      }
-    }
-  };
-
-  const handleFirstTimeRegistration = async () => {
-    const studentRecord = roster.find(r => r.email && r.email.toLowerCase() === emailInput.toLowerCase());
-    if (!studentRecord) {
-      setError('Email not found on the team roster. Please ask Coach to add you.');
-      setLoading(false);
-      return;
-    }
-    try {
-      await createUserWithEmailAndPassword(auth, emailInput, 'bluejays');
-      setLoading(false);
-    } catch (e: any) {
-      setError('Error creating account: ' + e.message);
+      setError('Invalid email or password.');
       setLoading(false);
     }
   };
@@ -327,38 +283,95 @@ const App = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true); setError('');
-    // Removed domain restriction per request - open registration
+    
     if (passwordInput.length < 6) { setError("Password must be at least 6 characters."); setLoading(false); return; }
     if (passwordInput !== confirmPassword) { setError("Passwords do not match."); setLoading(false); return; }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
-      const user = userCredential.user;
-      const existingStudent = roster.find(r => r.email && r.email.toLowerCase() === emailInput.toLowerCase());
-      
-      if (!existingStudent) {
-        let firstName = "Athlete"; let lastName = "";
-        const namePart = emailInput.split('@')[0];
-        if (namePart.includes('.')) {
-          const parts = namePart.split('.');
-          firstName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-          lastName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1);
-        } else { firstName = nameInput || namePart; }
-
-        await addDoc(collection(db, "roster"), {
-          First_Name: firstName, Last_Name: lastName, Email: emailInput, Status: 'Active', uid: user.uid
-        });
-        const newStudent = { id: user.uid, name: `${lastName}, ${firstName}`, email: emailInput };
-        setRoster(prev => [...prev, newStudent]);
-        setSelectedStudent(newStudent);
-      } else { setSelectedStudent(existingStudent); }
-    } catch (err: any) { setError(err.message.replace('Firebase: ', '')); } finally { setLoading(false); }
+      await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+      setOnboardingData(prev => ({ ...prev, parentEmail: emailInput }));
+      setShowOnboarding(true);
+      setOnboardingStep(1);
+    } catch (err: any) { 
+      setError(err.message.replace('Firebase: ', '')); 
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const handleForgotPassword = async () => {
     if (!emailInput) { setError('Please enter your email address above first.'); return; }
     try { await sendPasswordResetEmail(auth, emailInput); alert('Password reset email sent!'); setAuthView('login'); } 
     catch (e: any) { setError('Error: ' + e.message); }
+  };
+
+  const handleOnboardingComplete = async () => {
+    if (!onboardingData.firstName || !onboardingData.lastName || !onboardingData.grade) {
+      setError('Please complete all required fields.');
+      return;
+    }
+    if (!onboardingData.agreedToTerms) {
+      setError('You must agree to the terms to continue.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const profileData = {
+        First_Name: onboardingData.firstName,
+        Last_Name: onboardingData.lastName,
+        Email: user?.email || emailInput,
+        grade: onboardingData.grade,
+        birthDate: onboardingData.birthDate,
+        parentName: onboardingData.parentName,
+        parentPhone: onboardingData.parentPhone,
+        parentEmail: onboardingData.parentEmail,
+        emergencyContact: onboardingData.emergencyContact,
+        emergencyPhone: onboardingData.emergencyPhone,
+        medicalConditions: onboardingData.medicalConditions,
+        allergies: onboardingData.allergies,
+        experience: onboardingData.experience,
+        goals: onboardingData.goals,
+        shirtSize: onboardingData.shirtSize,
+        currentWeight: onboardingData.weight,
+        Status: 'Active',
+        onboardingComplete: true,
+        onboardingDate: new Date().toISOString(),
+        uid: user?.uid
+      };
+
+      const existingStudent = roster.find(r => r.email && r.email.toLowerCase() === (user?.email || emailInput).toLowerCase());
+      
+      if (existingStudent) {
+        const rosterRef = doc(db, "roster", existingStudent.id);
+        await setDoc(rosterRef, profileData, { merge: true });
+      } else {
+        await addDoc(collection(db, "roster"), profileData);
+      }
+
+      const newStudent = { 
+        id: user?.uid, 
+        name: `${onboardingData.lastName}, ${onboardingData.firstName}`, 
+        email: user?.email || emailInput,
+        ...profileData
+      };
+      
+      setRoster(prev => {
+        const filtered = prev.filter(r => r.id !== existingStudent?.id);
+        return [...filtered, newStudent];
+      });
+      
+      setSelectedStudent(newStudent);
+      setShowOnboarding(false);
+      setOnboardingStep(1);
+      
+      alert('Welcome to Lady Bluejays Wrestling! 🤼‍♀️');
+    } catch (err: any) {
+      setError('Error saving profile: ' + err.message);
+      if (err.message && err.message.includes("permissions")) setPermissionError(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -523,7 +536,6 @@ const App = () => {
     }
   };
 
-  // --- ADMIN ROSTER TOOLS ---
   const handleBulkImport = async () => {
     if (!csvData) return;
     setImportStatus('Parsing...');
@@ -597,42 +609,10 @@ const App = () => {
     }
   };
 
-  const handlePreloadedImport = async () => {
-    if (PRELOADED_ROSTER.length === 0) { alert("No roster data in code. Use Manual Import."); return; }
-    // Logic similar to Bulk Import but using PRELOADED_ROSTER array
-    // ... (omitted for brevity, same logic as boys app)
-    alert("Please use Manual Import or paste roster into code first.");
-  };
-
-  const handleDeleteAllRoster = async () => {
-    if (!confirm("⚠️ WARNING: This will DELETE EVERY STUDENT in the roster. Are you sure?")) return;
-    setImportStatus('Deleting entire roster...');
-    try {
-        const q = query(collection(db, "roster"));
-        const snapshot = await getDocs(q);
-        const batchSize = 500;
-        const docs = snapshot.docs;
-        for (let i = 0; i < docs.length; i += batchSize) {
-            const batch = writeBatch(db);
-            const chunk = docs.slice(i, i + batchSize);
-            chunk.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-        }
-        setImportStatus('Roster wiped clean.');
-    } catch (e: any) {
-        setImportStatus('Error deleting: ' + e.message);
-        if (e.message && e.message.includes("permissions")) setPermissionError(true);
-    }
-  };
-
-  // --- RENDER HELPERS ---
-  const filteredRoster = roster.filter(s => s.name && s.name.toLowerCase().includes(searchTerm.toLowerCase()));
   const getAbsentStudents = () => {
     const presentIds = new Set(todaysAttendance.map(a => a.studentId));
     return roster.filter(student => !presentIds.has(student.id));
   };
-
-  // ---------------- UI ----------------
 
   if (permissionError) {
     return (
@@ -672,7 +652,6 @@ const App = () => {
           <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); }} className="text-xs bg-red-900/50 px-3 py-1 rounded">Exit</button>
         </div>
 
-        {/* Admin Tabs */}
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {['live', 'content', 'history', 'roster'].map(t => (
             <button key={t} onClick={() => setAdminTab(t)} 
@@ -682,7 +661,6 @@ const App = () => {
           ))}
         </div>
 
-        {/* LIVE TAB */}
         {adminTab === 'live' && (
           <div className="space-y-4">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -706,7 +684,6 @@ const App = () => {
                 ))}
               </div>
             </div>
-            {/* ABSENT LIST */}
             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300">Absent</div>
               <div className="divide-y divide-gray-700">
@@ -720,10 +697,8 @@ const App = () => {
           </div>
         )}
 
-        {/* HISTORY TAB */}
         {adminTab === 'history' && (
           <div className="space-y-4">
-             {/* Report Builder */}
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
                 <div className="flex items-center gap-2 mb-4">
                   <BarChart3 className="w-5 h-5 text-blue-400" />
@@ -800,7 +775,6 @@ const App = () => {
           </div>
         )}
 
-        {/* CONTENT MANAGER TAB */}
         {adminTab === 'content' && (
           <div className="space-y-6">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
@@ -814,7 +788,6 @@ const App = () => {
               <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="URL" value={newVideoURL} onChange={e => setNewVideoURL(e.target.value)} />
               <button onClick={handleAddVideo} className="w-full bg-green-600 py-2 rounded text-sm font-bold">Add Video</button>
             </div>
-            {/* Calendar Info */}
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
               <h3 className="font-bold flex items-center gap-2 mb-2"><Calendar className="w-4 h-4 text-purple-400"/> Calendar</h3>
               <p className="text-xs text-gray-400 mb-2">ID: <span className="font-mono text-white">{GOOGLE_CALENDAR_ID || "Not Set"}</span></p>
@@ -823,88 +796,150 @@ const App = () => {
           </div>
         )}
 
-        {/* ROSTER TAB */}
         {adminTab === 'roster' && (
           <div className="space-y-6">
-             <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-lg">
-                <h4 className="text-red-400 font-bold mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Danger Zone</h4>
-                <button onClick={handleDeleteAllRoster} className="w-full bg-red-900/50 hover:bg-red-900/80 text-white border border-red-800 text-sm py-2 rounded-lg font-bold flex items-center justify-center gap-2"><Trash2 className="w-4 h-4"/> Delete Entire Roster</button>
-             </div>
              <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                 <p className="text-xs text-gray-500 mb-2 font-bold uppercase">Manual Import</p>
                 <textarea className="w-full bg-gray-800 border border-gray-600 text-xs text-gray-300 p-2 rounded h-24 font-mono" placeholder={`Email,Last_Name,First_Name\njane@school.edu,Doe,Jane`} value={csvData} onChange={(e) => setCsvData(e.target.value)} />
                 <button onClick={handleBulkImport} className="mt-2 w-full bg-gray-600 hover:bg-gray-500 text-white text-sm py-2 rounded flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" /> Process Import</button>
                 {importStatus && (<div className="mt-2 text-xs text-blue-400 font-mono">{importStatus}</div>)}
              </div>
-             <div className="flex gap-2">
-                <input type="text" placeholder="Lastname, Firstname" className="bg-gray-800 border border-gray-600 rounded p-2 text-sm text-white flex-1" value={newStudentName} onChange={(e) => setNewStudentName(e.target.value)} />
-                <button className="bg-pink-600 text-white px-3 rounded" onClick={async () => { if(newStudentName) { const parts = newStudentName.split(','); await addDoc(collection(db, "roster"), { Last_Name: parts[0].trim(), First_Name: parts[1]?.trim() || '' }); alert('Added!'); setNewStudentName(''); } }}><Plus className="w-4 h-4" /></button>
-             </div>
           </div>
         )}
       </div>
     );
   }
 
-  // 1. LOGIN / REGISTER VIEW (Default if no user)
   if (!user) {
     return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
-        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
-          <div className="text-center mb-6">
-             <Users className="w-12 h-12 text-pink-500 mx-auto mb-2" />
-             <h1 className="text-2xl font-extrabold text-white">Lady Bluejays</h1>
-             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">Wrestling Tracker</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-pink-900/10 to-gray-900 flex flex-col items-center justify-center p-6">
+        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-md shadow-2xl">
+          <div className="text-center mb-8">
+             <div className="relative inline-block mb-4">
+               <Users className="w-16 h-16 text-pink-500 mx-auto animate-pulse" />
+               <div className="absolute -bottom-1 -right-1 bg-pink-600 rounded-full p-1">
+                 <Zap className="w-4 h-4 text-white" />
+               </div>
+             </div>
+             <h1 className="text-3xl font-extrabold text-white mb-1">Lady Bluejays</h1>
+             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">Wrestling</p>
           </div>
 
           {authView === 'login' ? (
             <form onSubmit={handleLogin} className="space-y-4">
-              <h2 className="text-white font-bold text-lg">Sign In</h2>
-              <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="School Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-              <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
-              {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
-              <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : 'Sign In'}</button>
-              <div className="text-center text-xs text-gray-400 mt-4">
-                <button type="button" onClick={handleForgotPassword} className="hover:text-white underline">Forgot Password?</button>
-                <span className="mx-2">|</span>
-                <button type="button" onClick={() => { setAuthView('register'); setError(''); }} className="text-pink-400 hover:text-pink-300 font-bold">Create Account</button>
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4 mb-6">
+                <p className="text-blue-300 text-sm flex items-center gap-2">
+                  <Target className="w-4 h-4" />
+                  <span>Sign in to track your progress</span>
+                </p>
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Email</label>
+                <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="your.email@school.edu" value={emailInput} onChange={e => setEmailInput(e.target.value)} autoComplete="email" />
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Password</label>
+                <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="••••••••" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoComplete="current-password" />
+              </div>
+
+              {error && <div className="text-red-400 text-xs p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span></div>}
+              
+              <button disabled={loading} className="w-full bg-gradient-to-r from-pink-600 to-pink-500 hover:from-pink-500 hover:to-pink-400 text-white font-bold py-4 rounded-lg transition-all shadow-lg shadow-pink-900/20 flex items-center justify-center gap-2">
+                {loading ? '...' : (
+                  <>
+                    <UserCheck className="w-5 h-5" />
+                    Sign In
+                  </>
+                )}
+              </button>
+
+              <div className="flex items-center gap-3 my-6">
+                <div className="flex-1 h-px bg-gray-700"></div>
+                <span className="text-gray-500 text-xs">OR</span>
+                <div className="flex-1 h-px bg-gray-700"></div>
+              </div>
+
+              <button type="button" onClick={() => { setAuthView('register'); setError(''); }} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 rounded-lg transition-all flex items-center justify-center gap-2 border border-gray-600">
+                <UserPlus className="w-5 h-5" />
+                Create New Account
+              </button>
+
+              <div className="text-center mt-6">
+                <button type="button" onClick={handleForgotPassword} className="text-gray-400 hover:text-white text-sm underline transition-colors">
+                  Forgot Password?
+                </button>
               </div>
             </form>
           ) : (
             <form onSubmit={handleRegister} className="space-y-4">
-              <h2 className="text-white font-bold text-lg">Create Account</h2>
-              {/* Removed Email Domain Warning Banner */}
-              <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="your.email@example.com" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-              <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password (min 6 chars)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
-              <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Confirm Password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} />
-              {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
-              <button disabled={loading} className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? 'Creating...' : 'Register'}</button>
-              <button type="button" onClick={() => { setAuthView('login'); setError(''); }} className="w-full text-gray-500 text-xs mt-2">Back to Sign In</button>
+              <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 mb-6">
+                <h3 className="text-green-300 font-bold mb-1 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  Join the Team!
+                </h3>
+                <p className="text-green-200 text-xs">Create your account to get started</p>
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Email Address</label>
+                <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="your.email@school.edu" value={emailInput} onChange={e => setEmailInput(e.target.value)} autoComplete="email" />
+                <p className="text-gray-500 text-xs mt-1">Use your school email if available</p>
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Create Password</label>
+                <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="Min. 6 characters" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoComplete="new-password" />
+              </div>
+
+              <div>
+                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Confirm Password</label>
+                <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="Re-enter password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
+              </div>
+
+              {error && <div className="text-red-400 text-xs p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span></div>}
+              
+              <button disabled={loading} className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-bold py-4 rounded-lg transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2">
+                {loading ? 'Creating Account...' : (
+                  <>
+                    <UserPlus className="w-5 h-5" />
+                    Create Account
+                  </>
+                )}
+              </button>
+
+              <button type="button" onClick={() => { setAuthView('login'); setError(''); setEmailInput(''); setPasswordInput(''); setConfirmPassword(''); }} className="w-full text-gray-400 hover:text-white text-sm mt-4 transition-colors">
+                ← Back to Sign In
+              </button>
             </form>
           )}
 
-          <div className="mt-8 pt-8 border-t border-gray-700">
-             <button onClick={() => { setIsCoachAuthenticated(true); setAppMode('coach'); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full">
-               <Lock className="w-3 h-3"/> Coach Admin
+          <div className="mt-8 pt-6 border-t border-gray-700">
+             <button onClick={() => { setAppMode('coach'); }} className="text-gray-500 text-xs hover:text-gray-400 flex items-center justify-center gap-2 w-full transition-colors">
+               <Lock className="w-3 h-3"/> Coach Dashboard
              </button>
           </div>
         </div>
-        {/* Coach Login Overlay */}
-        {isCoachAuthenticated && !user?.email && (
-             <div className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
-                 <div className="bg-gray-800 p-8 rounded-xl w-full max-w-sm relative">
-                    <button onClick={() => { setIsCoachAuthenticated(false); }} className="absolute top-4 right-4 text-gray-400"><XCircle/></button>
-                    <h2 className="text-xl font-bold text-white mb-4">Coach Password</h2>
-                    <input type="password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4" placeholder="••••••••" value={coachPassInput} onChange={e => setCoachPassInput(e.target.value)} autoFocus />
-                    <button onClick={() => { if(coachPassInput === COACH_PASSWORD) { setIsCoachAuthenticated(true); setCoachPassInput(''); } else alert('Wrong'); }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-lg">Access</button>
-                 </div>
-             </div>
-        )}
+
+        <div className="mt-8 text-center text-gray-500 text-xs max-w-md">
+          <p>By creating an account, you'll complete a welcome form with important information about yourself and agree to our team policies.</p>
+        </div>
       </div>
     );
   }
 
-  // 4. ATHLETE DASHBOARD
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="text-center">
+          <Users className="w-16 h-16 text-pink-500 mx-auto mb-4 animate-pulse" />
+          <p className="text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   const currentStudent = roster.find(r => r.email && r.email.toLowerCase() === user?.email?.toLowerCase());
   
   return (
@@ -915,7 +950,6 @@ const App = () => {
       </div>
 
       <div className="p-4 max-w-md mx-auto">
-         {/* 1. CHECK IN */}
          {activeTab === 'checkin' && (
             <div className="animate-in fade-in">
                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl mb-6">
@@ -926,6 +960,19 @@ const App = () => {
                        <div><label className="text-gray-400 text-xs font-bold">Weight</label><input type="number" step="0.1" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-xl text-xl font-mono" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" /></div>
                        <div><label className="text-gray-400 text-xs font-bold">Skin Check</label><div className="flex gap-2"><button onClick={() => setSkinCheck(true)} className={`flex-1 py-3 rounded-xl border ${skinCheck ? 'bg-green-600 border-green-500' : 'bg-gray-700 border-gray-600'}`}>Pass</button><button onClick={() => setSkinCheck(false)} className={`flex-1 py-3 rounded-xl border ${!skinCheck ? 'bg-red-600 border-red-500' : 'bg-gray-700 border-gray-600'}`}>Fail</button></div></div>
                        <button onClick={() => { setSelectedStudent(currentStudent); handleCheckIn({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">{loading ? '...' : 'Submit'}</button>
+                       
+                       {checkInSuccess && (
+                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-in fade-in">
+                           <div className="bg-gray-800 p-8 rounded-2xl border border-green-500 max-w-sm mx-4 text-center animate-in zoom-in">
+                             <div className="bg-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                               <CheckCircle className="w-10 h-10 text-white" />
+                             </div>
+                             <h3 className="text-2xl font-bold text-white mb-2">Checked In!</h3>
+                             <p className="text-gray-300">Weight logged: {weight} lbs</p>
+                             {syncStatus === 'success' && <p className="text-green-400 text-sm mt-2">✓ Synced to Google Sheets</p>}
+                           </div>
+                         </div>
+                       )}
                     </div>
                   ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
                </div>
@@ -935,14 +982,13 @@ const App = () => {
                </div>
             </div>
          )}
-         {/* 2. JOURNAL */}
+
          {activeTab === 'journal' && (
             <div className="animate-in fade-in">
                <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
                   <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-400"/> Mindset & Nutrition</h2>
                   {currentStudent ? (
                     <div className="space-y-6">
-                      {/* NUTRITION SECTION */}
                       <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
                         <h3 className="text-gray-300 text-xs font-bold uppercase mb-3 flex items-center gap-2"><Utensils className="w-3 h-3 text-green-400"/> Daily Fuel</h3>
                         <div className="grid grid-cols-2 gap-4 mb-4">
@@ -971,14 +1017,12 @@ const App = () => {
                         </div>
                       </div>
 
-                      {/* MINDSET SECTION */}
                       <div><label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Daily Gratitude</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm h-20" placeholder="I am grateful for..." value={journalGratitude} onChange={(e) => setJournalGratitude(e.target.value)}/></div>
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Word</label>
                         <div className="flex flex-wrap gap-2">{['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => <button key={word} onClick={() => setFocusWord(word)} className={`px-3 py-2 rounded-lg text-xs font-bold border ${focusWord === word ? 'bg-pink-600 border-pink-500' : 'bg-gray-700 border-gray-600'}`}>{word}</button>)}</div>
                       </div>
                       
-                      {/* TECHNICAL FOCUS */}
                       <div>
                         <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Swords className="w-3 h-3"/> Position of the Day</label>
                         <select className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-500" value={techFocus} onChange={(e) => setTechFocus(e.target.value)}>
@@ -992,19 +1036,31 @@ const App = () => {
                         <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm" placeholder="e.g. I am unstoppable." value={dailyMantra} onChange={(e) => setDailyMantra(e.target.value)}/>
                       </div>
 
-                      {/* WELLNESS */}
                       <div className="grid grid-cols-2 gap-4">
                         <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Battery className="w-3 h-3"/> Energy</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
                         <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Smile className="w-3 h-3"/> Mood</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
                       </div>
 
                       <button onClick={() => { setSelectedStudent(currentStudent); handleJournalSubmit({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">Submit Log</button>
+                      
+                      {journalSuccess && (
+                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-in fade-in">
+                          <div className="bg-gray-800 p-8 rounded-2xl border border-pink-500 max-w-sm mx-4 text-center animate-in zoom-in">
+                            <div className="bg-pink-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                              <BookOpen className="w-10 h-10 text-white" />
+                            </div>
+                            <h3 className="text-2xl font-bold text-white mb-2">Journal Saved!</h3>
+                            <p className="text-gray-300">Your mindset log has been recorded</p>
+                            <p className="text-pink-400 text-sm mt-2 font-bold">{focusWord && `Focus: ${focusWord}`}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
                </div>
             </div>
          )}
-         {/* 3. FOCUS */}
+
          {activeTab === 'focus' && (
            <div className="animate-in fade-in h-full flex flex-col">
              {currentStudent ? (
@@ -1038,7 +1094,7 @@ const App = () => {
              ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
            </div>
          )}
-         {/* 4. RESOURCES */}
+
          {activeTab === 'resources' && (
             <div className="space-y-4 animate-in fade-in">
                <h2 className="text-2xl font-bold text-white mb-4">Videos</h2>
@@ -1061,7 +1117,7 @@ const App = () => {
                 )})}
             </div>
          )}
-         {/* 5. CALENDAR */}
+
          {activeTab === 'calendar' && (
             <div className="space-y-3 animate-in fade-in">
               <h2 className="text-2xl font-bold text-white mb-4">Schedule</h2>
@@ -1071,7 +1127,7 @@ const App = () => {
               <a href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(GOOGLE_CALENDAR_ID)}`} target="_blank" rel="noreferrer" className="block w-full text-center bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all">+ Add to My Calendar</a>
             </div>
          )}
-         {/* 6. STATS */}
+
          {activeTab === 'stats' && (
              <div className="space-y-4 animate-in fade-in">
                  <h2 className="text-2xl font-bold text-white">My History</h2>
@@ -1092,7 +1148,6 @@ const App = () => {
          )}
       </div>
 
-      {/* NAV BAR */}
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40">
          <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}><CheckCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold uppercase">Check In</span></button>
          <button onClick={() => setActiveTab('focus')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'focus' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Focus</span></button>
