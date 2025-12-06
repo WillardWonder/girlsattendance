@@ -217,19 +217,36 @@ const App = () => {
 
   const loadConfidenceBank = async (uid: string) => {
     try {
+      // 1. Daily Logs (Improvement & Gratitude)
       const q1 = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
       const snap1 = await getDocs(q1);
-      const dailyDeposits = snap1.docs.map(d => ({ 
-        id: d.id, date: d.data().date, text: d.data().mentalImprovement, type: 'improvement' 
-      })).filter(d => d.text);
+      const dailyDeposits: any[] = [];
+      snap1.docs.forEach(d => {
+         const data = d.data();
+         if(data.mentalImprovement) {
+            dailyDeposits.push({ id: d.id + '_imp', date: data.date, text: `Improvement: ${data.mentalImprovement}`, type: 'improvement' });
+         }
+         if(data.gratitude) {
+            dailyDeposits.push({ id: d.id + '_grat', date: data.date, text: `Gratitude: ${data.gratitude}`, type: 'gratitude' });
+         }
+      });
 
-      const q2 = query(collection(db, "match_logs"), where("uid", "==", uid), where("result", "==", "Win"), orderBy("timestamp", "desc"), limit(20));
+      // 2. Match Logs (Wins & Reflections)
+      // Removed "Win" filter to catch "what went well" even in losses
+      const q2 = query(collection(db, "match_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
       const snap2 = await getDocs(q2);
-      const winDeposits = snap2.docs.map(d => ({ 
-        id: d.id, date: d.data().date, text: `Win vs ${d.data().opponent}`, type: 'win' 
-      }));
+      const matchDeposits: any[] = [];
+      snap2.docs.forEach(d => {
+         const data = d.data();
+         if(data.result === 'Win') {
+             matchDeposits.push({ id: d.id + '_win', date: data.date, text: `WIN vs ${data.opponent}`, type: 'win' });
+         }
+         if(data.reflection?.well) {
+             matchDeposits.push({ id: d.id + '_well', date: data.date, text: `Match Highlight: ${data.reflection.well}`, type: 'match_well' });
+         }
+      });
 
-      const allDeposits = [...dailyDeposits, ...winDeposits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const allDeposits = [...dailyDeposits, ...matchDeposits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setConfidenceDeposits(allDeposits);
     } catch (e: any) { 
       if (e.code === 'failed-precondition') console.warn("INDEX NEEDED: Check console for link");
@@ -1021,7 +1038,7 @@ const App = () => {
            <div className="space-y-6 animate-in fade-in">
              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500"/> Confidence Bank</h2>
              <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-                {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.improvement}"</div></div>)}</div>}
+                {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.text}"</div></div>)}</div>}
              </div>
            </div>
         )}
