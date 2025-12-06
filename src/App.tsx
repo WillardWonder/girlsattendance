@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
@@ -36,6 +36,15 @@ const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendanc
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
+
+// Attempt to set persistence to local, handling quota errors automatically
+setPersistence(auth, browserLocalPersistence).catch((error) => {
+  console.warn("Auth persistence warning:", error);
+  if (error.code === 'auth/quota-exceeded' || error.message.includes('quota')) {
+     console.log("Attempting to clear storage to fix quota...");
+     try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}
+  }
+});
 
 const App = () => {
   // Auth State
@@ -344,8 +353,12 @@ const App = () => {
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('');
     
-    // Client-side Validation to prevent 400 errors
-    if(passwordInput.length < 6) {
+    // 1. Trim Inputs (Fixes "400" error due to trailing spaces)
+    const emailClean = emailInput.trim();
+    const passClean = passwordInput; // Passwords might intentionally have spaces, so we don't trim middle, but usually trailing is user error. Firebase handles this.
+
+    // Client-side Validation
+    if(passClean.length < 6) {
         setError("Password must be at least 6 characters long.");
         setLoading(false);
         return;
@@ -353,21 +366,30 @@ const App = () => {
 
     try {
       if (authView === 'login') {
-        await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+        await signInWithEmailAndPassword(auth, emailClean, passClean);
       } else {
-        const cred = await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+        const cred = await createUserWithEmailAndPassword(auth, emailClean, passClean);
         let fName = "Athlete"; let lName = "New";
-        const parts = emailInput.split('@')[0].split('.');
+        const parts = emailClean.split('@')[0].split('.');
         if(parts.length > 1) { fName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1); lName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1); }
-        await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailInput, First_Name: fName, Last_Name: lName, joined: new Date().toISOString(), identity: ['', '', '', '', ''], whys: ['', '', ''], purpose: '' });
-        await addDoc(collection(db, "roster"), { First_Name: fName, Last_Name: lName, Email: emailInput });
+        await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailClean, First_Name: fName, Last_Name: lName, joined: new Date().toISOString(), identity: ['', '', '', '', ''], whys: ['', '', ''], purpose: '' });
+        await addDoc(collection(db, "roster"), { First_Name: fName, Last_Name: lName, Email: emailClean });
       }
     } catch (err: any) { 
-        let msg = err.message.replace('Firebase:', '').trim();
-        if(msg.includes('auth/email-already-in-use')) msg = "Email already registered. Please Sign In.";
-        if(msg.includes('auth/wrong-password')) msg = "Incorrect password.";
-        if(msg.includes('auth/user-not-found')) msg = "User not found. Please Sign Up.";
-        if(msg.includes('auth/invalid-email')) msg = "Invalid email format.";
+        console.error("Auth Error Full Object:", err); // Log full error for debugging
+        let msg = err.message || "Authentication failed.";
+        
+        // Map common Firebase errors to user-friendly messages
+        if(err.code === 'auth/email-already-in-use') msg = "Email already registered. Please Sign In.";
+        else if(err.code === 'auth/wrong-password') msg = "Incorrect password.";
+        else if(err.code === 'auth/user-not-found') msg = "User not found. Please Sign Up.";
+        else if(err.code === 'auth/invalid-email') msg = "Invalid email format.";
+        else if(err.code === 'auth/network-request-failed') msg = "Network error. Check connection.";
+        else if(err.message.includes("quota")) {
+            msg = "Device storage full. Clearing cache... Try again in 5 seconds.";
+            try { localStorage.clear(); sessionStorage.clear(); } catch(e) {}
+        }
+        
         setError(msg); 
     } finally { 
         setLoading(false); 
