@@ -8,7 +8,7 @@ import {
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud
+  XCircle, AlertTriangle, UploadCloud, RefreshCw
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -152,6 +152,14 @@ const App = () => {
   const selectStudent = (student: any) => {
     setSelectedStudent(student);
     setSearchTerm(student.name || "");
+  };
+
+  const handleResetAppData = () => {
+    if(confirm("This will clear cached data to fix loading errors. It will NOT delete your saved journals. Continue?")) {
+        localStorage.clear();
+        sessionStorage.clear();
+        window.location.reload();
+    }
   };
 
   const getVideoMetadata = (url: string) => {
@@ -341,6 +349,14 @@ const App = () => {
   // --- HANDLERS ---
   const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true); setError('');
+    
+    // Client-side Validation to prevent 400 errors
+    if(passwordInput.length < 6) {
+        setError("Password must be at least 6 characters long.");
+        setLoading(false);
+        return;
+    }
+
     try {
       if (authView === 'login') {
         await signInWithEmailAndPassword(auth, emailInput, passwordInput);
@@ -352,7 +368,16 @@ const App = () => {
         await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailInput, First_Name: fName, Last_Name: lName, joined: new Date().toISOString(), identity: ['', '', '', '', ''], whys: ['', '', ''], purpose: '' });
         await addDoc(collection(db, "roster"), { First_Name: fName, Last_Name: lName, Email: emailInput });
       }
-    } catch (err: any) { setError(err.message.replace('Firebase:', '')); } finally { setLoading(false); }
+    } catch (err: any) { 
+        let msg = err.message.replace('Firebase:', '').trim();
+        if(msg.includes('auth/email-already-in-use')) msg = "Email already registered. Please Sign In.";
+        if(msg.includes('auth/wrong-password')) msg = "Incorrect password.";
+        if(msg.includes('auth/user-not-found')) msg = "User not found. Please Sign Up.";
+        if(msg.includes('auth/invalid-email')) msg = "Invalid email format.";
+        setError(msg); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const submitDaily = async () => {
@@ -449,12 +474,15 @@ const App = () => {
           <form onSubmit={handleAuth} className="space-y-4">
             <h2 className="text-white font-bold text-lg">{authView === 'login' ? 'Sign In' : 'New Account'}</h2>
             <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
-            <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
+            <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password (Min 6 chars)" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
             {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
             <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
             <div className="text-center text-xs text-gray-400 mt-4"><button type="button" onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="text-pink-400 hover:text-pink-300 font-bold">{authView === 'login' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}</button></div>
           </form>
-          <div className="mt-8 pt-8 border-t border-gray-700"><button onClick={() => { setShowCoachLoginModal(true); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button></div>
+          <div className="mt-8 pt-8 border-t border-gray-700 space-y-4">
+            <button onClick={() => { setShowCoachLoginModal(true); }} className="text-gray-600 text-xs hover:text-gray-400 flex items-center justify-center gap-1 w-full"><Lock className="w-3 h-3"/> Coach Admin</button>
+            <button onClick={handleResetAppData} className="text-red-900/50 hover:text-red-500 text-[10px] flex items-center justify-center gap-1 w-full uppercase font-bold tracking-wider"><RefreshCw className="w-3 h-3"/> Trouble Logging In? Fix / Reset App Data</button>
+          </div>
         </div>
         
         {/* COACH MODAL */}
