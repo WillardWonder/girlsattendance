@@ -273,9 +273,13 @@ const App = () => {
   const loadComments = async (postId: string) => {
     try {
       setLoading(true);
-      const q = query(collection(db, "post_comments"), where("postId", "==", postId), orderBy("timestamp", "asc"));
+      // Remove orderBy("timestamp") to avoid index errors in dev. Sort client side.
+      const q = query(collection(db, "post_comments"), where("postId", "==", postId));
       const snap = await getDocs(q);
-      setPostComments(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      const comments = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort client-side
+      comments.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      setPostComments(comments);
     } catch(e) { console.error("Comment load error", e); }
     finally { setLoading(false); }
   };
@@ -474,7 +478,16 @@ const App = () => {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    const attendanceData = { ...commonData, grade: userProfile?.Grade || '', weight: parseFloat(weight), skinCheckPass: skinCheck, type: 'attendance' };
+    // Modified to include Focus data for Live View
+    const attendanceData = { 
+        ...commonData, 
+        grade: userProfile?.Grade || '', 
+        weight: parseFloat(weight), 
+        skinCheckPass: skinCheck, 
+        type: 'attendance',
+        focusWord: dailyFocusWord,
+        focusStatement: dailyFocusStatement
+    };
     await addDoc(collection(db, "attendance"), attendanceData);
     syncToSheets(attendanceData);
 
@@ -646,12 +659,16 @@ const App = () => {
                 {todaysAttendance.map(r => (
                   <div key={r.id} className="p-3 flex justify-between items-center">
                     <div>
-                      <div className="font-bold">{r.name}</div>
-                      <div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div>
+                      <div className="font-bold text-lg text-white">{r.name}</div>
+                      <div className="text-sm text-gray-400 italic">"{r.focusStatement}"</div>
                     </div>
-                    <div className="flex items-center gap-2">
-                       {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
-                       <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button>
+                    <div className="text-right">
+                       <div className="text-xs text-gray-500 mb-1">{r.time}</div>
+                       <div className="font-bold text-pink-500 uppercase text-xs">{r.focusWord}</div>
+                       <div className="flex items-center justify-end gap-2 mt-2">
+                          {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
+                          <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-600 hover:text-red-500"/></button>
+                       </div>
                     </div>
                   </div>
                 ))}
