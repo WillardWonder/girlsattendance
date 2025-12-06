@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, writeBatch, doc, where, deleteDoc, limit, setDoc } from 'firebase/firestore';
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail } from 'firebase/auth';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc } from 'firebase/firestore';
 import { 
-  Search, CheckCircle, Scale, AlertCircle, UserPlus, ClipboardList, UploadCloud, Users, 
-  Calendar, Clock, UserCheck, UserX, LayoutDashboard, Trash2, AlertTriangle, Lock, 
-  History, BarChart3, XCircle, Download, Filter, ChevronDown, ChevronUp, Copy, Check, 
-  Video, MessageSquare, TrendingUp, Plus, Youtube, Megaphone, ExternalLink, 
-  ShieldAlert, BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, 
-  Utensils, Droplets, Swords
+  CheckCircle, AlertCircle, Calendar, Clock, 
+  Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
+  CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
+  BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
+  Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords
 } from 'lucide-react';
 
+// --- CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
   authDomain: "girls-wrestling-attendance.firebaseapp.com",
@@ -21,1140 +21,597 @@ const firebaseConfig = {
   measurementId: "G-CVY2FGY8L2"
 };
 
+// Hardcoded for build stability
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec"; 
-const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com"; 
 const COACH_PASSWORD = "bluejays";
 
+// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const auth = getAuth(app);
 
 const App = () => {
+  // Auth State
   const [user, setUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null); // Stores the "Foundation" data
   const [authLoading, setAuthLoading] = useState(true);
   const [authView, setAuthView] = useState<'login' | 'register'>('login');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const [onboardingStep, setOnboardingStep] = useState(1);
-  const [onboardingData, setOnboardingData] = useState({
-    firstName: '', lastName: '', grade: '', birthDate: '', parentName: '', parentPhone: '',
-    parentEmail: '', emergencyContact: '', emergencyPhone: '', medicalConditions: '', allergies: '',
-    experience: 'beginner', goals: '', shirtSize: 'M', weight: '', agreedToTerms: false
-  });
-  
-  const [activeTab, setActiveTab] = useState('checkin');
-  const [appMode, setAppMode] = useState<'athlete' | 'coach'>('athlete');
-  const [roster, setRoster] = useState<any[]>([]);
-  const [announcements, setAnnouncements] = useState<any[]>([]);
-  const [resources, setResources] = useState<any[]>([]);
-  
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const [weight, setWeight] = useState('');
-  const [notes, setNotes] = useState('');
+  // App State
+  const [activeTab, setActiveTab] = useState('daily');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [skinCheck, setSkinCheck] = useState(true);
-  const [checkInSuccess, setCheckInSuccess] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'success' | 'error'>('idle');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const [journalGratitude, setJournalGratitude] = useState('');
-  const [focusWord, setFocusWord] = useState('');
-  const [focusStatement, setFocusStatement] = useState('');
-  const [dailyMantra, setDailyMantra] = useState('');
-  const [techFocus, setTechFocus] = useState('');
-  const [nutritionVeggies, setNutritionVeggies] = useState(false);
-  const [nutritionFruit, setNutritionFruit] = useState(false);
-  const [nutritionWater, setNutritionWater] = useState(0);
-  const [energyLevel, setEnergyLevel] = useState(3);
-  const [moodLevel, setMoodLevel] = useState(3);
-  const [journalSuccess, setJournalSuccess] = useState(false);
+  // --- TAB 1: DAILY GRIND STATE ---
+  const [sleepHours, setSleepHours] = useState('');
+  const [sleepQuality, setSleepQuality] = useState('Good');
+  const [energyColor, setEnergyColor] = useState(''); // 'green', 'yellow', 'red'
+  const [nutrition, setNutrition] = useState({ veggies: false, protein: false, fruit: false, grain: false });
+  const [hydration, setHydration] = useState(0);
+  const [balance, setBalance] = useState({ faith: 5, family: 5, fitness: 5, finances: 5, academics: 5, fun: 5 });
+  const [mentalImprovement, setMentalImprovement] = useState('');
+  const [mentalTeammate, setMentalTeammate] = useState('');
 
+  // --- TAB 2: MATCH DAY STATE ---
+  const [matchEvent, setMatchEvent] = useState('');
+  const [matchOpponent, setMatchOpponent] = useState('');
+  const [matchResult, setMatchResult] = useState('Win');
+  const [matchWell, setMatchWell] = useState('');
+  const [matchLearn, setMatchLearn] = useState('');
+
+  // --- TAB 3: SUNDAY LAUNCH STATE ---
+  const [weeklyAcademic, setWeeklyAcademic] = useState('No');
+  const [weeklyWeight, setWeeklyWeight] = useState('Yes');
+  const [weeklyRecovery, setWeeklyRecovery] = useState(5);
+  const [weeklyGoal, setWeeklyGoal] = useState('');
+  // Focus Grid State
   const [focusState, setFocusState] = useState<'idle' | 'playing' | 'finished'>('idle');
   const [focusGrid, setFocusGrid] = useState<number[]>([]);
   const [focusNextNumber, setFocusNextNumber] = useState(0);
-  const [focusTimeLeft, setFocusTimeLeft] = useState(120);
-  const [focusScore, setFocusScore] = useState(0);
+  const [focusTime, setFocusTime] = useState(0); // Count up timer
 
-  const [statsStudent, setStatsStudent] = useState<any>(null);
-  const [studentHistory, setStudentHistory] = useState<any[]>([]);
+  // --- TAB 4: FOUNDATION STATE ---
+  const [identityWords, setIdentityWords] = useState(['', '', '', '', '']);
+  const [whyLevels, setWhyLevels] = useState(['', '', '']); // Join, Important, Root
+  const [purposeStatement, setPurposeStatement] = useState('');
 
-  const [adminTab, setAdminTab] = useState('live'); 
-  const [todaysAttendance, setTodaysAttendance] = useState<any[]>([]);
-  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
-  const [historyStats, setHistoryStats] = useState<any[]>([]);
-  const [isCoachAuthenticated, setIsCoachAuthenticated] = useState(false);
-  const [expandedDate, setExpandedDate] = useState<string | null>(null);
-  const [copiedDate, setCopiedDate] = useState<string | null>(null);
-  const [importStatus, setImportStatus] = useState('');
-  const [permissionError, setPermissionError] = useState(false);
-  const [csvData, setCsvData] = useState('');
-  
-  const [reportStartDate, setReportStartDate] = useState(new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split('T')[0]);
-  const [reportEndDate, setReportEndDate] = useState(new Date().toISOString().split('T')[0]);
-  const [reportStudentFilter, setReportStudentFilter] = useState('');
-  const [reportGradeFilter, setReportGradeFilter] = useState('');
-  
-  const [newAnnouncement, setNewAnnouncement] = useState('');
-  const [newVideoTitle, setNewVideoTitle] = useState('');
-  const [newVideoURL, setNewVideoURL] = useState('');
+  // --- TAB 5: CONFIDENCE BANK ---
+  const [confidenceDeposits, setConfidenceDeposits] = useState<any[]>([]);
 
-  const getVideoMetadata = (url: string) => {
-    if (!url) return { type: 'unknown', id: null, label: 'Link' };
-    if (url.includes('youtu.be') || url.includes('youtube.com')) {
-        const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-        const match = url.match(regExp);
-        const id = (match && match[2].length === 11) ? match[2] : null;
-        return { type: 'youtube', id, label: 'YouTube' };
-    }
-    if (url.includes('tiktok.com')) return { type: 'tiktok', id: null, label: 'TikTok' };
-    return { type: 'generic', id: null, label: 'Video' };
-  };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const rosterQ = query(collection(db, "roster"), orderBy("Last_Name"));
-        const rosterSnap = await getDocs(rosterQ);
-        const loadedRoster = rosterSnap.docs.map(doc => {
-          const d = doc.data();
-          const fName = d.First_Name || d.firstname || '';
-          const lName = d.Last_Name || d.lastname || '';
-          return { id: doc.id, name: `${lName}, ${fName}`, email: d.Email || d.email, ...d };
-        });
-        setRoster(loadedRoster);
-
-        const newsQ = query(collection(db, "announcements"), orderBy("timestamp", "desc"), limit(10));
-        const newsSnap = await getDocs(newsQ);
-        setAnnouncements(newsSnap.docs.map(d => ({id: d.id, ...d.data()})));
-
-        const resQ = query(collection(db, "resources"), orderBy("timestamp", "desc"));
-        const resSnap = await getDocs(resQ);
-        setResources(resSnap.docs.map(d => ({id: d.id, ...d.data()})));
-
-      } catch (e: any) {
-        console.error("Init Error:", e);
-        if (e.message && e.message.includes("Missing or insufficient permissions")) {
-          setPermissionError(true);
-        }
-      }
-    };
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
-      const fetchAdminData = async () => {
-        try {
-          const today = new Date().toLocaleDateString();
-          const attQ = query(collection(db, "attendance"), where("date", "==", today));
-          const attSnap = await getDocs(attQ);
-          setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()})));
-        } catch (e: any) {
-          if (e.message && e.message.includes("permissions")) setPermissionError(true);
-        }
-      };
-      fetchAdminData();
-      if(adminTab === 'history') fetchHistory();
-    }
-  }, [appMode, isCoachAuthenticated, adminTab, user]);
-
-  useEffect(() => {
-    if (appMode === 'athlete') {
-      setIsCoachAuthenticated(false);
-      setPasswordInput('');
-    }
-  }, [appMode]);
-
-  const fetchHistory = async () => {
-    try {
-      const q = query(collection(db, "attendance"), orderBy("timestamp", "desc"), limit(2000));
-      const querySnapshot = await getDocs(q);
-      const records = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setHistoryRecords(records);
-
-      const stats: {[key: string]: number} = {};
-      records.forEach((data: any) => {
-        const date = data.date;
-        if(date) stats[date] = (stats[date] || 0) + 1;
-      });
-
-      const statsArray = Object.keys(stats).map(date => ({
-        date,
-        count: stats[date]
-      })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      setHistoryStats(statsArray);
-    } catch (err) {
-      console.error("Error fetching history:", err);
-    }
-  };
-
+  // --- AUTH & PROFILE LOADING ---
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
-      setAuthLoading(false);
       if (currentUser) {
-        const match = roster.find(r => r.email && r.email.toLowerCase() === currentUser.email?.toLowerCase());
-        if (match) {
-          setSelectedStudent(match);
-          if (!match.First_Name || match.First_Name === 'Athlete' || !match.onboardingComplete) {
-            setShowOnboarding(true);
-            setOnboardingData(prev => ({
-              ...prev,
-              firstName: match.First_Name || '',
-              lastName: match.Last_Name || '',
-              grade: match.grade || '',
-            }));
-          }
+        // Load Profile (Foundation)
+        const docRef = doc(db, "user_profiles", currentUser.uid);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setUserProfile(data);
+          // Pre-fill foundation form
+          if (data.identity) setIdentityWords(data.identity);
+          if (data.whys) setWhyLevels(data.whys);
+          if (data.purpose) setPurposeStatement(data.purpose);
         } else {
-          setShowOnboarding(true);
+          // No profile? Send to Foundation tab for onboarding
+          setActiveTab('foundation');
         }
+        // Load Confidence Bank
+        loadConfidenceBank(currentUser.uid);
       }
+      setAuthLoading(false);
     });
     return () => unsubscribe();
-  }, [roster]);
+  }, []);
 
-  useEffect(() => {
-    let timer: any;
-    if (focusState === 'playing' && focusTimeLeft > 0) {
-      timer = setInterval(() => {
-        setFocusTimeLeft(prev => prev - 1);
-      }, 1000);
-    } else if (focusTimeLeft === 0 && focusState === 'playing') {
-      endFocusGame();
-    }
-    return () => clearInterval(timer);
-  }, [focusState, focusTimeLeft]);
-
-  const startFocusGame = () => {
-    if (!selectedStudent) { alert("Please select your name first."); return; }
-    const numbers = Array.from({length: 100}, (_, i) => i);
-    for (let i = numbers.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [numbers[i], numbers[j]] = [numbers[j], numbers[i]];
-    }
-    setFocusGrid(numbers);
-    setFocusNextNumber(0);
-    setFocusScore(0);
-    setFocusTimeLeft(120);
-    setFocusState('playing');
+  const loadConfidenceBank = async (uid: string) => {
+    const q = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(50));
+    const snap = await getDocs(q);
+    const deposits = snap.docs.map(d => ({ 
+      id: d.id, 
+      date: d.data().date, 
+      improvement: d.data().mentalImprovement 
+    })).filter(d => d.improvement); // Only show entries with text
+    setConfidenceDeposits(deposits);
   };
 
-  const handleGridClick = (num: number) => {
-    if (num === focusNextNumber) {
-        const newScore = focusNextNumber + 1;
-        setFocusNextNumber(newScore);
-        setFocusScore(newScore);
-        if (newScore === 100) endFocusGame(true);
-    }
-  };
-
-  const endFocusGame = async (completed = false) => {
-    setFocusState('finished');
-    if (selectedStudent) {
-        const scoreData = {
-            studentId: selectedStudent.id,
-            name: selectedStudent.name,
-            score: completed ? 100 : focusNextNumber,
-            completed,
-            timestamp: new Date().toISOString(),
-            date: new Date().toLocaleDateString(),
-            type: 'focus_drill'
-        };
-        await addDoc(collection(db, "focus_scores"), scoreData);
-    }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError('');
+  // --- SYNC TO GOOGLE SHEETS ---
+  const syncToSheets = async (data: any) => {
+    if (!GOOGLE_SCRIPT_URL) return;
     try {
-      await signInWithEmailAndPassword(auth, emailInput, passwordInput);
-    } catch (err: any) {
-      setError('Invalid email or password.');
-      setLoading(false);
-    }
-  };
-
-  const handleRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true); setError('');
-    
-    if (passwordInput.length < 6) { setError("Password must be at least 6 characters."); setLoading(false); return; }
-    if (passwordInput !== confirmPassword) { setError("Passwords do not match."); setLoading(false); return; }
-
-    try {
-      await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
-      setOnboardingData(prev => ({ ...prev, parentEmail: emailInput }));
-      setShowOnboarding(true);
-      setOnboardingStep(1);
-    } catch (err: any) { 
-      setError(err.message.replace('Firebase: ', '')); 
-    } finally { 
-      setLoading(false); 
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!emailInput) { setError('Please enter your email address above first.'); return; }
-    try { await sendPasswordResetEmail(auth, emailInput); alert('Password reset email sent!'); setAuthView('login'); } 
-    catch (e: any) { setError('Error: ' + e.message); }
-  };
-
-  const handleOnboardingComplete = async () => {
-    if (!onboardingData.firstName || !onboardingData.lastName || !onboardingData.grade) {
-      setError('Please complete all required fields.');
-      return;
-    }
-    if (!onboardingData.agreedToTerms) {
-      setError('You must agree to the terms to continue.');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const profileData = {
-        First_Name: onboardingData.firstName,
-        Last_Name: onboardingData.lastName,
-        Email: user?.email || emailInput,
-        grade: onboardingData.grade,
-        birthDate: onboardingData.birthDate,
-        parentName: onboardingData.parentName,
-        parentPhone: onboardingData.parentPhone,
-        parentEmail: onboardingData.parentEmail,
-        emergencyContact: onboardingData.emergencyContact,
-        emergencyPhone: onboardingData.emergencyPhone,
-        medicalConditions: onboardingData.medicalConditions,
-        allergies: onboardingData.allergies,
-        experience: onboardingData.experience,
-        goals: onboardingData.goals,
-        shirtSize: onboardingData.shirtSize,
-        currentWeight: onboardingData.weight,
-        Status: 'Active',
-        onboardingComplete: true,
-        onboardingDate: new Date().toISOString(),
-        uid: user?.uid
-      };
-
-      const existingStudent = roster.find(r => r.email && r.email.toLowerCase() === (user?.email || emailInput).toLowerCase());
-      
-      if (existingStudent) {
-        const rosterRef = doc(db, "roster", existingStudent.id);
-        await setDoc(rosterRef, profileData, { merge: true });
-      } else {
-        await addDoc(collection(db, "roster"), profileData);
-      }
-
-      const newStudent = { 
-        id: user?.uid, 
-        name: `${onboardingData.lastName}, ${onboardingData.firstName}`, 
-        email: user?.email || emailInput,
-        ...profileData
-      };
-      
-      setRoster(prev => {
-        const filtered = prev.filter(r => r.id !== existingStudent?.id);
-        return [...filtered, newStudent];
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data)
       });
-      
-      setSelectedStudent(newStudent);
-      setShowOnboarding(false);
-      setOnboardingStep(1);
-      
-      alert('Welcome to Lady Bluejays Wrestling! 🤼‍♀️');
-    } catch (err: any) {
-      setError('Error saving profile: ' + err.message);
-      if (err.message && err.message.includes("permissions")) setPermissionError(true);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { console.error("Sheet Sync Error", e); }
   };
 
-  const handleLogout = () => {
-    signOut(auth);
-    setIsCoachAuthenticated(false);
-    setSelectedStudent(null);
-    setUser(null); 
-  };
+  // --- HANDLERS ---
 
-  const handleCheckIn = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudent || !weight) { setError("Name and Weight required."); return; }
-    setLoading(true); setSyncStatus('syncing');
-
-    const data = {
-      studentId: selectedStudent.id, name: selectedStudent.name, grade: selectedStudent.grade || '', weight: parseFloat(weight),
-      skinCheckPass: skinCheck, notes, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString(),
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), type: 'attendance'
-    };
-
+    setLoading(true); setError('');
     try {
-      await addDoc(collection(db, "attendance"), data);
-      if (GOOGLE_SCRIPT_URL) {
-        fetch(GOOGLE_SCRIPT_URL, {
-          method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
-        }).then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
+      if (authView === 'login') {
+        await signInWithEmailAndPassword(auth, emailInput, passwordInput);
+      } else {
+        const cred = await createUserWithEmailAndPassword(auth, emailInput, passwordInput);
+        // Create initial empty profile doc
+        await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailInput, joined: new Date().toISOString() });
       }
-      setCheckInSuccess(true);
-      setTimeout(() => { setCheckInSuccess(false); setWeight(''); setNotes(''); setSearchTerm(''); setSelectedStudent(null); setSyncStatus('idle'); }, 2500);
     } catch (err: any) {
-      if (err.message && err.message.includes("permissions")) setPermissionError(true); else setError("Check-in failed.");
+      setError(err.message.replace('Firebase:', ''));
     } finally { setLoading(false); }
   };
 
-  const handleJournalSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedStudent || !focusWord) { setError("Name and Focus Word required."); return; }
+  // TAB 1: DAILY GRIND SUBMIT
+  const submitDaily = async () => {
+    if (!energyColor || !sleepHours) { alert("Please fill out Sleep and Energy sections."); return; }
     setLoading(true);
-
     const data = {
-      studentId: selectedStudent.id, 
-      name: selectedStudent.name, 
-      gratitude: journalGratitude, 
-      focusWord, 
-      focusStatement,
-      mantra: dailyMantra,
-      techFocus,
-      nutrition: { veggies: nutritionVeggies, fruit: nutritionFruit, water: nutritionWater },
-      energy: energyLevel, 
-      mood: moodLevel, 
-      timestamp: new Date().toISOString(), 
-      date: new Date().toLocaleDateString(), 
-      type: 'journal'
+      uid: user.uid,
+      email: user.email,
+      type: 'daily_log',
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+      sleep: { hours: sleepHours, quality: sleepQuality },
+      energy: energyColor,
+      nutrition,
+      hydration,
+      balance,
+      mentalImprovement,
+      mentalTeammate
     };
+    await addDoc(collection(db, "daily_logs"), data);
+    syncToSheets(data);
+    setSuccessMsg("Day Logged! 1% Better.");
+    setTimeout(() => setSuccessMsg(''), 3000);
+    setLoading(false);
+    // Refresh bank
+    loadConfidenceBank(user.uid);
+  };
 
-    try {
-      await addDoc(collection(db, "journals"), data);
-      if (GOOGLE_SCRIPT_URL) {
-        fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) })
-        .then(() => setSyncStatus('success')).catch(() => setSyncStatus('error'));
+  // TAB 2: MATCH SUBMIT
+  const submitMatch = async () => {
+    if (!matchEvent || !matchOpponent) { alert("Please fill match details."); return; }
+    setLoading(true);
+    const data = {
+      uid: user.uid,
+      type: 'match_log',
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+      event: matchEvent,
+      opponent: matchOpponent,
+      result: matchResult,
+      reflection: { well: matchWell, learn: matchLearn }
+    };
+    await addDoc(collection(db, "match_logs"), data);
+    syncToSheets(data);
+    setSuccessMsg("Match Recorded.");
+    setTimeout(() => { setSuccessMsg(''); setMatchOpponent(''); setMatchWell(''); setMatchLearn(''); }, 3000);
+    setLoading(false);
+  };
+
+  // TAB 3: FOCUS GRID LOGIC
+  useEffect(() => {
+    let timer: any;
+    if (focusState === 'playing') {
+      timer = setInterval(() => { setFocusTime(t => t + 1); }, 1000);
+    }
+    return () => clearInterval(timer);
+  }, [focusState]);
+
+  const startFocus = () => {
+    const nums = Array.from({length: 100}, (_, i) => i);
+    // Shuffle
+    for (let i = nums.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [nums[i], nums[j]] = [nums[j], nums[i]]; }
+    setFocusGrid(nums); setFocusNextNumber(0); setFocusTime(0); setFocusState('playing');
+  };
+
+  const tapFocusNumber = (num: number) => {
+    if (num === focusNextNumber) {
+      if (num === 99) {
+        setFocusState('finished');
+      } else {
+        setFocusNextNumber(n => n + 1);
       }
-      setJournalSuccess(true);
-      setTimeout(() => { 
-          setJournalSuccess(false); setJournalGratitude(''); setFocusWord(''); setFocusStatement(''); setDailyMantra(''); setTechFocus(''); setEnergyLevel(3); setMoodLevel(3); setNutritionVeggies(false); setNutritionFruit(false); setNutritionWater(0); setSearchTerm(''); setSelectedStudent(null);
-      }, 2500);
-    } catch (err) { setError("Failed to save journal."); } finally { setLoading(false); }
-  };
-
-  const loadStudentStats = async (student: any) => {
-    setStatsStudent(student);
-    const q = query(collection(db, "attendance"), where("studentId", "==", student.id), orderBy("timestamp", "desc"), limit(20));
-    const snap = await getDocs(q);
-    setStudentHistory(snap.docs.map(d => d.data()));
-  };
-
-  const handleAddAnnouncement = async () => {
-    if(!newAnnouncement) return;
-    try {
-      await addDoc(collection(db, "announcements"), { message: newAnnouncement, timestamp: new Date().toISOString(), date: new Date().toLocaleDateString() });
-      setNewAnnouncement(''); alert('Posted!');
-    } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
-  };
-
-  const handleAddVideo = async () => {
-    if(!newVideoTitle || !newVideoURL) return;
-    try {
-      await addDoc(collection(db, "resources"), { title: newVideoTitle, url: newVideoURL, type: 'youtube', timestamp: new Date().toISOString() });
-      setNewVideoTitle(''); setNewVideoURL(''); alert('Video Added!');
-    } catch(e: any) { if (e.message && e.message.includes("permissions")) setPermissionError(true); }
-  };
-
-  const unlockCoach = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(passwordInput === COACH_PASSWORD) { 
-      setIsCoachAuthenticated(true); 
-      setPasswordInput(''); 
-    } else { 
-      alert('Wrong Password'); 
     }
   };
 
-  const handleDeleteCheckIn = async (id: string, name: string) => {
-    if(!confirm(`Remove ${name}?`)) return;
-    await deleteDoc(doc(db, "attendance", id));
-    const today = new Date().toLocaleDateString();
-    const attQ = query(collection(db, "attendance"), where("date", "==", today));
-    const attSnap = await getDocs(attQ);
-    setTodaysAttendance(attSnap.docs.map(d => ({id: d.id, ...d.data()})));
-  };
-
-  const handleCopyForSheets = (date: string) => {
-    const records = historyRecords.filter(r => r.date === date).sort((a,b) => String(a.name).localeCompare(String(b.name)));
-    let text = "Name\tWeight\tTime\tNotes\n";
-    records.forEach(r => {
-      text += `${r.name}\t${r.weight}\t${r.time}\t${r.notes || ''}\n`;
-    });
-    navigator.clipboard.writeText(text).then(() => {
-      setCopiedDate(date);
-      setTimeout(() => setCopiedDate(null), 2000);
-    });
-  };
-
-  const handleGenerateReport = async () => {
-    try {
-        let records = historyRecords;
-        const start = new Date(reportStartDate).setHours(0,0,0,0);
-        const end = new Date(reportEndDate).setHours(23,59,59,999);
-
-        records = records.filter(r => {
-            const rDate = new Date(r.timestamp).getTime();
-            return rDate >= start && rDate <= end;
-        });
-
-        if (reportStudentFilter) records = records.filter(r => r.name === reportStudentFilter);
-        if (reportGradeFilter) records = records.filter(r => r.grade === reportGradeFilter);
-
-        if (records.length === 0) {
-            alert("No records found matching these filters.");
-            return;
-        }
-
-        let csvContent = "data:text/csv;charset=utf-8,";
-        csvContent += "Date,Time,Name,Grade,Weight,Skin Check,Notes\n";
-
-        records.forEach(row => {
-            const skinCheck = row.skinCheckPass ? "Pass" : "Fail";
-            const notes = row.notes ? `"${row.notes.replace(/"/g, '""')}"` : "";
-            csvContent += `${row.date},${row.time},${row.name},${row.grade || ''},${row.weight},${skinCheck},${notes}\n`;
-        });
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `attendance_report_${reportStartDate}_to_${reportEndDate}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-
-    } catch (e) {
-        console.error(e);
-        alert("Error generating report");
-    }
-  };
-
-  const handleBulkImport = async () => {
-    if (!csvData) return;
-    setImportStatus('Parsing...');
-    const rows = csvData.trim().split('\n');
-    if (rows.length < 2) { setImportStatus('Error: No data rows found.'); return; }
-    
-    const firstRow = rows[0];
-    const separator = firstRow.includes('\t') ? '\t' : ',';
-    
-    const normalizeHeader = (h: string) => {
-        const clean = h.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-        if (['lastname', 'last_name', 'last'].includes(clean)) return 'Last_Name';
-        if (['firstname', 'first_name', 'first'].includes(clean)) return 'First_Name';
-        return h.trim().replace(/^"|"$/g, ''); 
+  // TAB 3: WEEKLY PREP SUBMIT
+  const submitWeekly = async () => {
+    setLoading(true);
+    const data = {
+      uid: user.uid,
+      type: 'weekly_prep',
+      timestamp: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+      focus_time: focusState === 'finished' ? focusTime : 'Did not finish',
+      academic_check: weeklyAcademic,
+      weight_check: weeklyWeight,
+      recovery_score: weeklyRecovery,
+      weekly_goal: weeklyGoal
     };
-
-    const originalHeaders = firstRow.split(separator).map(h => h.trim());
-    const headers = originalHeaders.map(normalizeHeader);
-    
-    if (!headers.includes('Last_Name') || !headers.includes('First_Name')) {
-      setImportStatus(`Error: Missing Name columns.`);
-      return;
-    }
-
-    const csvWrestlers = rows.slice(1).map(row => {
-      if (!row.trim()) return null;
-      const values = row.split(separator);
-      const obj: any = {};
-      headers.forEach((header, index) => {
-        let val = values[index]?.trim();
-        if (val && val.startsWith('"') && val.endsWith('"')) val = val.slice(1, -1);
-        if (header) obj[header] = val;
-      });
-      return obj;
-    }).filter(w => w && w.Last_Name && w.First_Name); 
-
-    setImportStatus('Checking for duplicates...');
-    try {
-        const currentRosterSnapshot = await getDocs(collection(db, "roster"));
-        const existingNames = new Set();
-        currentRosterSnapshot.docs.forEach(doc => {
-            const data = doc.data();
-            const fName = (data.First_Name || data.firstname || '').toString().toLowerCase().trim();
-            const lName = (data.Last_Name || data.lastname || '').toString().toLowerCase().trim();
-            existingNames.add(`${fName}-${lName}`);
-        });
-
-        const newWrestlers = csvWrestlers.filter(w => {
-            const fName = (w.First_Name || '').toString().toLowerCase().trim();
-            const lName = (w.Last_Name || '').toString().toLowerCase().trim();
-            return !existingNames.has(`${fName}-${lName}`);
-        });
-
-        if (newWrestlers.length === 0) {
-            setImportStatus('All names in CSV already exist. No changes made.');
-            return;
-        }
-
-        setImportStatus(`Uploading ${newWrestlers.length} new wrestlers...`);
-        const batch = writeBatch(db);
-        newWrestlers.forEach(wrestler => {
-            const docRef = doc(collection(db, "roster"));
-            batch.set(docRef, wrestler);
-        });
-        await batch.commit();
-        setImportStatus(`Success! Added ${newWrestlers.length} new wrestlers.`);
-        setCsvData('');
-    } catch (e: any) {
-        setImportStatus('Error uploading: ' + e.message);
-        if (e.message && e.message.includes("permissions")) setPermissionError(true);
-    }
+    await addDoc(collection(db, "weekly_prep"), data);
+    syncToSheets(data);
+    setSuccessMsg("Week Launched!");
+    setTimeout(() => setSuccessMsg(''), 3000);
+    setLoading(false);
   };
 
-  const getAbsentStudents = () => {
-    const presentIds = new Set(todaysAttendance.map(a => a.studentId));
-    return roster.filter(student => !presentIds.has(student.id));
+  // TAB 4: FOUNDATION SAVE
+  const saveFoundation = async () => {
+    setLoading(true);
+    const data = {
+      identity: identityWords,
+      whys: whyLevels,
+      purpose: purposeStatement,
+      updated: new Date().toISOString()
+    };
+    await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
+    setUserProfile({ ...userProfile, ...data });
+    setSuccessMsg("Foundation Saved.");
+    setTimeout(() => setSuccessMsg(''), 3000);
+    setLoading(false);
   };
 
-  if (permissionError) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center p-4">
-        <div className="bg-red-900/20 border border-red-500 p-8 rounded-xl max-w-lg w-full text-center">
-          <ShieldAlert className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-4">Database Locked</h2>
-          <p className="text-gray-300 mb-6">Coach needs to fix Firebase security permissions.</p>
-          <button onClick={() => window.location.reload()} className="bg-red-600 text-white font-bold py-3 px-6 rounded-lg w-full">Reload</button>
-        </div>
-      </div>
-    );
-  }
 
-  if (appMode === 'coach' && !isCoachAuthenticated && !user?.isCoach) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-4">
-        <div className="bg-gray-800 p-8 rounded-xl border border-gray-700 w-full max-w-sm text-center">
-          <Lock className="w-12 h-12 text-pink-500 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Coach Access</h2>
-          <form onSubmit={unlockCoach}>
-            <input type="password" placeholder="Password" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg mb-4 text-center"
-              value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoFocus />
-            <button className="w-full bg-pink-600 text-white font-bold py-3 rounded-lg">Unlock</button>
-          </form>
-          <button onClick={() => setAppMode('athlete')} className="mt-6 text-gray-500 text-sm">Back to Athlete View</button>
-        </div>
-      </div>
-    );
-  }
+  // --- VIEWS ---
 
-  if ((appMode === 'coach' && isCoachAuthenticated) || user?.isCoach) {
-    return (
-      <div className="min-h-screen bg-gray-900 text-white p-4 pb-20">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-xl font-bold">Coach Dashboard</h1>
-          <button onClick={() => { setIsCoachAuthenticated(false); setAppMode('athlete'); }} className="text-xs bg-red-900/50 px-3 py-1 rounded">Exit</button>
-        </div>
+  if (authLoading) return <div className="min-h-screen bg-gray-900 flex items-center justify-center text-white">Loading...</div>;
 
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          {['live', 'content', 'history', 'roster'].map(t => (
-            <button key={t} onClick={() => setAdminTab(t)} 
-              className={`px-4 py-2 rounded-lg text-sm font-bold whitespace-nowrap ${adminTab === t ? 'bg-pink-600' : 'bg-gray-800 text-gray-400'}`}>
-              {t.charAt(0).toUpperCase() + t.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {adminTab === 'live' && (
-          <div className="space-y-4">
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <div className="text-gray-400 text-xs uppercase font-bold">Present Today</div>
-              <div className="text-3xl font-bold text-green-400">{todaysAttendance.length}</div>
-            </div>
-            <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-              <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300">Checked In</div>
-              <div className="divide-y divide-gray-700">
-                {todaysAttendance.map(r => (
-                  <div key={r.id} className="p-3 flex justify-between items-center">
-                    <div>
-                      <div className="font-bold">{r.name}</div>
-                      <div className="text-xs text-gray-500">{r.time} • {r.weight}lbs</div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                       {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
-                       <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-500"/></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-              <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300">Absent</div>
-              <div className="divide-y divide-gray-700">
-                {getAbsentStudents().map(s => (
-                  <div key={s.id} className="p-3 text-sm text-gray-400 flex justify-between">
-                    <span>{s.name}</span><span className="text-gray-500 text-xs">{s.grade ? `Gr ${s.grade}` : ''}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {adminTab === 'history' && (
-          <div className="space-y-4">
-             <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
-                <div className="flex items-center gap-2 mb-4">
-                  <BarChart3 className="w-5 h-5 text-blue-400" />
-                  <h4 className="text-blue-300 font-bold">Report Builder</h4>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Start Date</label>
-                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStartDate} onChange={e => setReportStartDate(e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">End Date</label>
-                    <input type="date" className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportEndDate} onChange={e => setReportEndDate(e.target.value)} />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Filter by Athlete</label>
-                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportStudentFilter} onChange={e => setReportStudentFilter(e.target.value)}>
-                      <option value="">All Athletes</option>
-                      {roster.map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Filter by Grade/Group</label>
-                    <select className="w-full bg-gray-800 border border-gray-600 text-white text-xs rounded p-2" value={reportGradeFilter} onChange={e => setReportGradeFilter(e.target.value)}>
-                      <option value="">All Grades</option>
-                      {[...new Set(roster.map(s => s.grade).filter(Boolean))].sort().map(g => (
-                        <option key={String(g)} value={String(g)}>Grade {g}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <button onClick={handleGenerateReport} className="w-full bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold py-2 px-3 rounded flex items-center justify-center gap-2">
-                  <Download className="w-4 h-4" /> Download Report (CSV)
-                </button>
-             </div>
-
-             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-               <div className="p-3 bg-gray-900/50 border-b border-gray-700 font-bold text-gray-300 text-xs uppercase tracking-wider">Recent Activity</div>
-               <div className="divide-y divide-gray-700">
-                  {historyStats.map((stat, idx) => (
-                    <div key={idx} className="flex flex-col border-b border-gray-700/50 last:border-0">
-                      <button onClick={() => setExpandedDate(expandedDate === stat.date ? null : stat.date)} className="p-4 flex justify-between items-center w-full hover:bg-gray-700/50">
-                         <div className="flex items-center gap-3">
-                           <Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span>
-                         </div>
-                         <div className="flex items-center gap-2">
-                            <span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>
-                            {expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
-                         </div>
-                      </button>
-                      {expandedDate === stat.date && (
-                        <div className="bg-gray-900/50 p-4 border-t border-gray-700">
-                          <button onClick={() => handleCopyForSheets(stat.date)} className="text-xs flex items-center gap-1 text-blue-400 mb-2">
-                            {copiedDate === stat.date ? <Check className="w-3 h-3"/> : <Copy className="w-3 h-3"/>} Copy for Sheets
-                          </button>
-                          <div className="space-y-1">
-                            {historyRecords.filter(r => r.date === stat.date).map(s => (
-                              <div key={s.id} className="flex justify-between text-sm text-gray-300 border-b border-gray-800 pb-1">
-                                <span>{s.name}</span><span className="font-mono text-gray-500">{s.weight}</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-               </div>
-             </div>
-          </div>
-        )}
-
-        {adminTab === 'content' && (
-          <div className="space-y-6">
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Post Announcement</h3>
-              <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Message..." value={newAnnouncement} onChange={e => setNewAnnouncement(e.target.value)} />
-              <button onClick={handleAddAnnouncement} className="w-full bg-pink-600 py-2 rounded text-sm font-bold">Post</button>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <h3 className="font-bold flex items-center gap-2 mb-3"><Youtube className="w-4 h-4 text-red-400"/> Add Video Resource</h3>
-              <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Title" value={newVideoTitle} onChange={e => setNewVideoTitle(e.target.value)} />
-              <input className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="URL" value={newVideoURL} onChange={e => setNewVideoURL(e.target.value)} />
-              <button onClick={handleAddVideo} className="w-full bg-green-600 py-2 rounded text-sm font-bold">Add Video</button>
-            </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-              <h3 className="font-bold flex items-center gap-2 mb-2"><Calendar className="w-4 h-4 text-purple-400"/> Calendar</h3>
-              <p className="text-xs text-gray-400 mb-2">ID: <span className="font-mono text-white">{GOOGLE_CALENDAR_ID || "Not Set"}</span></p>
-              <a href="https://calendar.google.com" target="_blank" rel="noreferrer" className="text-xs bg-gray-700 px-3 py-2 rounded text-white block text-center">Manage in Google Calendar</a>
-            </div>
-          </div>
-        )}
-
-        {adminTab === 'roster' && (
-          <div className="space-y-6">
-             <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                <p className="text-xs text-gray-500 mb-2 font-bold uppercase">Manual Import</p>
-                <textarea className="w-full bg-gray-800 border border-gray-600 text-xs text-gray-300 p-2 rounded h-24 font-mono" placeholder={`Email,Last_Name,First_Name\njane@school.edu,Doe,Jane`} value={csvData} onChange={(e) => setCsvData(e.target.value)} />
-                <button onClick={handleBulkImport} className="mt-2 w-full bg-gray-600 hover:bg-gray-500 text-white text-sm py-2 rounded flex items-center justify-center gap-2"><UploadCloud className="w-4 h-4" /> Process Import</button>
-                {importStatus && (<div className="mt-2 text-xs text-blue-400 font-mono">{importStatus}</div>)}
-             </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
+  // LOGIN SCREEN
   if (!user) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-pink-900/10 to-gray-900 flex flex-col items-center justify-center p-6">
-        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-md shadow-2xl">
-          <div className="text-center mb-8">
-             <div className="relative inline-block mb-4">
-               <Users className="w-16 h-16 text-pink-500 mx-auto animate-pulse" />
-               <div className="absolute -bottom-1 -right-1 bg-pink-600 rounded-full p-1">
-                 <Zap className="w-4 h-4 text-white" />
-               </div>
-             </div>
-             <h1 className="text-3xl font-extrabold text-white mb-1">Lady Bluejays</h1>
-             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">Wrestling</p>
+      <div className="min-h-screen bg-gray-900 flex flex-col items-center justify-center p-6">
+        <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm shadow-2xl">
+          <div className="text-center mb-6">
+             <Brain className="w-12 h-12 text-pink-500 mx-auto mb-2" />
+             <h1 className="text-2xl font-extrabold text-white">Merrill Smart Journal</h1>
+             <p className="text-pink-400 text-sm font-bold uppercase tracking-widest">My Mind Masters Me</p>
           </div>
-
-          {authView === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4 mb-6">
-                <p className="text-blue-300 text-sm flex items-center gap-2">
-                  <Target className="w-4 h-4" />
-                  <span>Sign in to track your progress</span>
-                </p>
-              </div>
-
-              <div>
-                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Email</label>
-                <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="your.email@school.edu" value={emailInput} onChange={e => setEmailInput(e.target.value)} autoComplete="email" />
-              </div>
-
-              <div>
-                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Password</label>
-                <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="••••••••" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoComplete="current-password" />
-              </div>
-
-              {error && <div className="text-red-400 text-xs p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span></div>}
-              
-              <button disabled={loading} className="w-full bg-gradient-to-r from-pink-600 to-pink-500 hover:from-pink-500 hover:to-pink-400 text-white font-bold py-4 rounded-lg transition-all shadow-lg shadow-pink-900/20 flex items-center justify-center gap-2">
-                {loading ? '...' : (
-                  <>
-                    <UserCheck className="w-5 h-5" />
-                    Sign In
-                  </>
-                )}
+          <form onSubmit={handleAuth} className="space-y-4">
+            <h2 className="text-white font-bold text-lg">{authView === 'login' ? 'Sign In' : 'New Account'}</h2>
+            <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Email" value={emailInput} onChange={e => setEmailInput(e.target.value)} />
+            <input type="password" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg" placeholder="Password" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} />
+            {error && <div className="text-red-400 text-xs p-2 bg-red-900/20 rounded">{error}</div>}
+            <button disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg transition-all">{loading ? '...' : (authView === 'login' ? 'Sign In' : 'Create Account')}</button>
+            <div className="text-center text-xs text-gray-400 mt-4">
+              <button type="button" onClick={() => setAuthView(authView === 'login' ? 'register' : 'login')} className="text-pink-400 hover:text-pink-300 font-bold">
+                {authView === 'login' ? 'Need an account? Sign Up' : 'Have an account? Sign In'}
               </button>
-
-              <div className="flex items-center gap-3 my-6">
-                <div className="flex-1 h-px bg-gray-700"></div>
-                <span className="text-gray-500 text-xs">OR</span>
-                <div className="flex-1 h-px bg-gray-700"></div>
-              </div>
-
-              <button type="button" onClick={() => { setAuthView('register'); setError(''); }} className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-4 rounded-lg transition-all flex items-center justify-center gap-2 border border-gray-600">
-                <UserPlus className="w-5 h-5" />
-                Create New Account
-              </button>
-
-              <div className="text-center mt-6">
-                <button type="button" onClick={handleForgotPassword} className="text-gray-400 hover:text-white text-sm underline transition-colors">
-                  Forgot Password?
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleRegister} className="space-y-4">
-              <div className="bg-green-900/20 border border-green-800 rounded-lg p-4 mb-6">
-                <h3 className="text-green-300 font-bold mb-1 flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4" />
-                  Join the Team!
-                </h3>
-                <p className="text-green-200 text-xs">Create your account to get started</p>
-              </div>
-
-              <div>
-                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Email Address</label>
-                <input type="email" required className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="your.email@school.edu" value={emailInput} onChange={e => setEmailInput(e.target.value)} autoComplete="email" />
-                <p className="text-gray-500 text-xs mt-1">Use your school email if available</p>
-              </div>
-
-              <div>
-                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Create Password</label>
-                <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="Min. 6 characters" value={passwordInput} onChange={e => setPasswordInput(e.target.value)} autoComplete="new-password" />
-              </div>
-
-              <div>
-                <label className="text-gray-400 text-xs font-bold mb-2 block uppercase tracking-wide">Confirm Password</label>
-                <input type="password" required minLength={6} className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-lg outline-none focus:border-pink-500 transition-colors" placeholder="Re-enter password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} autoComplete="new-password" />
-              </div>
-
-              {error && <div className="text-red-400 text-xs p-3 bg-red-900/20 border border-red-800 rounded-lg flex items-start gap-2"><AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" /><span>{error}</span></div>}
-              
-              <button disabled={loading} className="w-full bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 text-white font-bold py-4 rounded-lg transition-all shadow-lg shadow-green-900/20 flex items-center justify-center gap-2">
-                {loading ? 'Creating Account...' : (
-                  <>
-                    <UserPlus className="w-5 h-5" />
-                    Create Account
-                  </>
-                )}
-              </button>
-
-              <button type="button" onClick={() => { setAuthView('login'); setError(''); setEmailInput(''); setPasswordInput(''); setConfirmPassword(''); }} className="w-full text-gray-400 hover:text-white text-sm mt-4 transition-colors">
-                ← Back to Sign In
-              </button>
-            </form>
-          )}
-
-          <div className="mt-8 pt-6 border-t border-gray-700">
-             <button onClick={() => { setAppMode('coach'); }} className="text-gray-500 text-xs hover:text-gray-400 flex items-center justify-center gap-2 w-full transition-colors">
-               <Lock className="w-3 h-3"/> Coach Dashboard
-             </button>
-          </div>
-        </div>
-
-        <div className="mt-8 text-center text-gray-500 text-xs max-w-md">
-          <p>By creating an account, you'll complete a welcome form with important information about yourself and agree to our team policies.</p>
+            </div>
+          </form>
         </div>
       </div>
     );
   }
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="text-center">
-          <Users className="w-16 h-16 text-pink-500 mx-auto mb-4 animate-pulse" />
-          <p className="text-gray-400">Loading...</p>
-        </div>
-      </div>
-    );
-  }
-
-  const currentStudent = roster.find(r => r.email && r.email.toLowerCase() === user?.email?.toLowerCase());
-  
+  // MAIN APP
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
+      
+      {/* HEADER */}
       <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg flex justify-between items-center">
-         <div><h1 className="text-lg font-extrabold text-white">Lady Bluejays</h1>{currentStudent && <p className="text-xs text-pink-400">Welcome, {currentStudent.First_Name}!</p>}</div>
-         <button onClick={handleLogout} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
+         <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1></div>
+         <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
-      <div className="p-4 max-w-md mx-auto">
-         {activeTab === 'checkin' && (
-            <div className="animate-in fade-in">
-               <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl mb-6">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><Clock className="w-5 h-5 text-pink-400"/> Daily Check-in</h2>
-                  {currentStudent ? (
-                    <div className="space-y-4">
-                       <div className="bg-pink-900/20 p-3 rounded-lg border border-pink-800 text-pink-300 text-sm flex items-center gap-2"><CheckCircle className="w-4 h-4"/> Checking in as <span className="font-bold">{selectedStudent ? selectedStudent.name : currentStudent.name}</span></div>
-                       <div><label className="text-gray-400 text-xs font-bold">Weight</label><input type="number" step="0.1" className="w-full bg-gray-900 border border-gray-600 text-white p-3 rounded-xl text-xl font-mono" value={weight} onChange={e => setWeight(e.target.value)} placeholder="0.0" /></div>
-                       <div><label className="text-gray-400 text-xs font-bold">Skin Check</label><div className="flex gap-2"><button onClick={() => setSkinCheck(true)} className={`flex-1 py-3 rounded-xl border ${skinCheck ? 'bg-green-600 border-green-500' : 'bg-gray-700 border-gray-600'}`}>Pass</button><button onClick={() => setSkinCheck(false)} className={`flex-1 py-3 rounded-xl border ${!skinCheck ? 'bg-red-600 border-red-500' : 'bg-gray-700 border-gray-600'}`}>Fail</button></div></div>
-                       <button onClick={() => { setSelectedStudent(currentStudent); handleCheckIn({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">{loading ? '...' : 'Submit'}</button>
-                       
-                       {checkInSuccess && (
-                         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-in fade-in">
-                           <div className="bg-gray-800 p-8 rounded-2xl border border-green-500 max-w-sm mx-4 text-center animate-in zoom-in">
-                             <div className="bg-green-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                               <CheckCircle className="w-10 h-10 text-white" />
-                             </div>
-                             <h3 className="text-2xl font-bold text-white mb-2">Checked In!</h3>
-                             <p className="text-gray-300">Weight logged: {weight} lbs</p>
-                             {syncStatus === 'success' && <p className="text-green-400 text-sm mt-2">✓ Synced to Google Sheets</p>}
-                           </div>
-                         </div>
-                       )}
-                    </div>
-                  ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
+      {/* SUCCESS POPUP */}
+      {successMsg && (
+        <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-full shadow-xl z-50 font-bold animate-in fade-in slide-in-from-top-4 flex items-center gap-2">
+          <CheckCircle className="w-5 h-5" /> {successMsg}
+        </div>
+      )}
+
+      {/* TABS CONTENT */}
+      <div className="p-4 max-w-lg mx-auto">
+
+        {/* --- TAB 1: DAILY GRIND --- */}
+        {activeTab === 'daily' && (
+          <div className="space-y-6 animate-in fade-in">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Flame className="w-5 h-5 text-orange-500"/> The Daily Grind</h2>
+            
+            {/* Wellness Section */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">1. Wellness Check</h3>
+               
+               {/* Sleep */}
+               <div className="grid grid-cols-2 gap-4 mb-4">
+                 <div>
+                   <label className="text-xs text-gray-500 mb-1 block">Hours Sleep</label>
+                   <input type="number" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={sleepHours} onChange={e => setSleepHours(e.target.value)} />
+                 </div>
+                 <div>
+                   <label className="text-xs text-gray-500 mb-1 block">Quality</label>
+                   <div className="flex bg-gray-900 rounded border border-gray-600 overflow-hidden">
+                     {['Good', 'Bad'].map(q => (
+                       <button key={q} onClick={() => setSleepQuality(q)} className={`flex-1 py-2 text-xs font-bold ${sleepQuality === q ? 'bg-blue-600 text-white' : 'text-gray-400'}`}>{q}</button>
+                     ))}
+                   </div>
+                 </div>
                </div>
-               <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                  <h3 className="font-bold text-gray-300 mb-3 flex items-center gap-2"><Megaphone className="w-4 h-4 text-yellow-500"/> Recent News</h3>
-                  <div className="space-y-3">{announcements.slice(0,2).map(a => <div key={a.id} className="text-sm border-l-2 border-yellow-500 pl-3"><div className="text-gray-200">{a.message}</div><div className="text-xs text-gray-500 mt-1">{a.date}</div></div>)}</div>
+
+               {/* Energy Light */}
+               <div className="mb-4">
+                 <label className="text-xs text-gray-500 mb-2 block">Energy Traffic Light</label>
+                 <div className="flex gap-2">
+                   <button onClick={() => setEnergyColor('green')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'green' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
+                     🟢 Explosive
+                   </button>
+                   <button onClick={() => setEnergyColor('yellow')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'yellow' ? 'bg-yellow-900/50 border-yellow-500 text-yellow-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
+                     🟡 Steady
+                   </button>
+                   <button onClick={() => setEnergyColor('red')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${energyColor === 'red' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>
+                     🔴 Tired
+                   </button>
+                 </div>
                </div>
-            </div>
-         )}
 
-         {activeTab === 'journal' && (
-            <div className="animate-in fade-in">
-               <div className="bg-gray-800 p-6 rounded-2xl border border-gray-700 shadow-xl">
-                  <h2 className="text-lg font-bold text-white mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-pink-400"/> Mindset & Nutrition</h2>
-                  {currentStudent ? (
-                    <div className="space-y-6">
-                      <div className="bg-gray-700/50 p-4 rounded-xl border border-gray-600">
-                        <h3 className="text-gray-300 text-xs font-bold uppercase mb-3 flex items-center gap-2"><Utensils className="w-3 h-3 text-green-400"/> Daily Fuel</h3>
-                        <div className="grid grid-cols-2 gap-4 mb-4">
-                           <div>
-                             <label className="text-xs text-gray-400 block mb-1">Vegetables?</label>
-                             <div className="flex gap-1">
-                               <button onClick={() => setNutritionVeggies(true)} className={`flex-1 py-2 rounded text-xs font-bold ${nutritionVeggies ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'}`}>Yes</button>
-                               <button onClick={() => setNutritionVeggies(false)} className={`flex-1 py-2 rounded text-xs font-bold ${!nutritionVeggies ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500'}`}>No</button>
-                             </div>
-                           </div>
-                           <div>
-                             <label className="text-xs text-gray-400 block mb-1">Fruit?</label>
-                             <div className="flex gap-1">
-                               <button onClick={() => setNutritionFruit(true)} className={`flex-1 py-2 rounded text-xs font-bold ${nutritionFruit ? 'bg-green-600 text-white' : 'bg-gray-800 text-gray-500'}`}>Yes</button>
-                               <button onClick={() => setNutritionFruit(false)} className={`flex-1 py-2 rounded text-xs font-bold ${!nutritionFruit ? 'bg-gray-600 text-white' : 'bg-gray-800 text-gray-500'}`}>No</button>
-                             </div>
-                           </div>
-                        </div>
-                        <div>
-                           <label className="text-xs text-gray-400 block mb-2 flex items-center gap-1"><Droplets className="w-3 h-3 text-blue-400"/> Water Intake (Bottles)</label>
-                           <div className="flex items-center justify-between bg-gray-800 rounded-lg p-2">
-                              <button onClick={() => setNutritionWater(Math.max(0, nutritionWater-1))} className="w-8 h-8 bg-gray-700 rounded text-white font-bold">-</button>
-                              <span className="text-xl font-mono font-bold text-blue-400">{nutritionWater}</span>
-                              <button onClick={() => setNutritionWater(nutritionWater+1)} className="w-8 h-8 bg-gray-700 rounded text-white font-bold">+</button>
-                           </div>
-                        </div>
-                      </div>
-
-                      <div><label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Daily Gratitude</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm h-20" placeholder="I am grateful for..." value={journalGratitude} onChange={(e) => setJournalGratitude(e.target.value)}/></div>
-                      <div>
-                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">Focus Word</label>
-                        <div className="flex flex-wrap gap-2">{['Consistent', 'Persistent', 'Resilient', 'Relentless', 'Respectful'].map(word => <button key={word} onClick={() => setFocusWord(word)} className={`px-3 py-2 rounded-lg text-xs font-bold border ${focusWord === word ? 'bg-pink-600 border-pink-500' : 'bg-gray-700 border-gray-600'}`}>{word}</button>)}</div>
-                      </div>
-                      
-                      <div>
-                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 flex items-center gap-1"><Swords className="w-3 h-3"/> Position of the Day</label>
-                        <select className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm outline-none focus:border-pink-500" value={techFocus} onChange={(e) => setTechFocus(e.target.value)}>
-                          <option value="">Select Focus...</option>
-                          {['Neutral', 'Top', 'Bottom', 'Takedowns', 'Escapes', 'Pinning', 'Defense', 'Scramble', 'Conditioning'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-gray-400 text-xs uppercase font-bold mb-2 block">My Mantra</label>
-                        <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded-xl p-3 text-white text-sm" placeholder="e.g. I am unstoppable." value={dailyMantra} onChange={(e) => setDailyMantra(e.target.value)}/>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Battery className="w-3 h-3"/> Energy</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setEnergyLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${energyLevel === lvl ? 'bg-yellow-500 text-black' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
-                        <div><label className="text-gray-400 text-xs font-bold mb-2 flex items-center gap-1"><Smile className="w-3 h-3"/> Mood</label><div className="flex justify-between bg-gray-900 rounded-lg p-1 border border-gray-600">{[1, 2, 3, 4, 5].map(lvl => <button key={lvl} onClick={() => setMoodLevel(lvl)} className={`w-8 h-8 rounded flex items-center justify-center font-bold text-sm ${moodLevel === lvl ? 'bg-blue-500 text-white' : 'text-gray-500'}`}>{lvl}</button>)}</div></div>
-                      </div>
-
-                      <button onClick={() => { setSelectedStudent(currentStudent); handleJournalSubmit({ preventDefault: () => {} } as any); }} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg mt-2">Submit Log</button>
-                      
-                      {journalSuccess && (
-                        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 animate-in fade-in">
-                          <div className="bg-gray-800 p-8 rounded-2xl border border-pink-500 max-w-sm mx-4 text-center animate-in zoom-in">
-                            <div className="bg-pink-600 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                              <BookOpen className="w-10 h-10 text-white" />
-                            </div>
-                            <h3 className="text-2xl font-bold text-white mb-2">Journal Saved!</h3>
-                            <p className="text-gray-300">Your mindset log has been recorded</p>
-                            <p className="text-pink-400 text-sm mt-2 font-bold">{focusWord && `Focus: ${focusWord}`}</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
+               {/* Nutrition */}
+               <div className="mb-4">
+                 <label className="text-xs text-gray-500 mb-2 block">Nutrition</label>
+                 <div className="grid grid-cols-2 gap-2">
+                   {['Veggies', 'Protein', 'Fruit', 'Grain'].map(item => (
+                     <button 
+                       key={item} 
+                       onClick={() => setNutrition({...nutrition, [item.toLowerCase()]: !nutrition[item.toLowerCase() as keyof typeof nutrition]})}
+                       className={`py-2 px-3 rounded border text-xs font-bold flex items-center justify-between ${nutrition[item.toLowerCase() as keyof typeof nutrition] ? 'bg-green-900/30 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}
+                     >
+                       {item} {nutrition[item.toLowerCase() as keyof typeof nutrition] && <Check className="w-3 h-3"/>}
+                     </button>
+                   ))}
+                 </div>
                </div>
-            </div>
-         )}
 
-         {activeTab === 'focus' && (
-           <div className="animate-in fade-in h-full flex flex-col">
-             {currentStudent ? (
-               <div className="flex-1 flex flex-col">
-                  {focusState === 'idle' && (
-                    <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 text-center m-auto">
-                       <Target className="w-16 h-16 text-pink-500 mx-auto mb-4 animate-pulse"/>
-                       <h2 className="text-2xl font-extrabold text-white mb-2">2 Minutes of Focus</h2>
-                       <button onClick={() => { setSelectedStudent(currentStudent); startFocusGame(); }} className="bg-green-600 hover:bg-green-500 text-white font-bold py-4 px-12 rounded-xl text-xl shadow-lg shadow-green-900/20 flex items-center gap-3 mx-auto"><Play className="w-6 h-6 fill-current"/> Start</button>
-                    </div>
-                  )}
-                  {focusState === 'playing' && (
-                    <div className="flex flex-col h-full">
-                      <div className="flex justify-between items-center mb-4 px-2">
-                         <div><div className="text-xs text-gray-500 uppercase font-bold">Next</div><div className="text-3xl font-black text-white">{focusNextNumber}</div></div>
-                         <div className={`text-4xl font-mono font-bold ${focusTimeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-pink-500'}`}>{Math.floor(focusTimeLeft / 60)}:{(focusTimeLeft % 60).toString().padStart(2, '0')}</div>
-                      </div>
-                      <div className="grid grid-cols-10 gap-1 flex-1 content-start">
-                        {focusGrid.map((num) => <button key={num} onTouchStart={(e) => { e.preventDefault(); handleGridClick(num); }} onClick={() => handleGridClick(num)} className={`aspect-square flex items-center justify-center text-[10px] sm:text-xs font-bold rounded select-none ${num < focusNextNumber ? 'bg-green-600 text-white opacity-30' : 'bg-gray-800 text-gray-300 active:bg-pink-600 active:text-white'}`}>{num}</button>)}
-                      </div>
-                    </div>
-                  )}
-                  {focusState === 'finished' && (
-                    <div className="bg-gray-800 p-8 rounded-2xl border border-gray-700 text-center m-auto animate-in zoom-in">
-                       <div className="mx-auto bg-blue-900/30 w-24 h-24 rounded-full flex items-center justify-center mb-6 border-4 border-blue-500/50"><span className="text-4xl font-black text-white">{focusScore}</span></div>
-                       <h2 className="text-2xl font-bold text-white mb-2">Time's Up!</h2>
-                       <div className="flex gap-3 justify-center"><button onClick={startFocusGame} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center gap-2"><RotateCcw className="w-4 h-4"/> Retry</button><button onClick={() => setFocusState('idle')} className="bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 px-6 rounded-lg">Finish</button></div>
-                    </div>
-                  )}
-               </div>
-             ) : <div className="text-center text-gray-400 py-4">Loading profile...</div>}
-           </div>
-         )}
-
-         {activeTab === 'resources' && (
-            <div className="space-y-4 animate-in fade-in">
-               <h2 className="text-2xl font-bold text-white mb-4">Videos</h2>
-               {resources.map(vid => {
-                  const { type, id, label } = getVideoMetadata(vid.url);
-                  return (
-                  <div key={vid.id} className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 shadow-lg">
-                    <a href={vid.url} target="_blank" rel="noreferrer" className="block relative group">
-                       {type === 'youtube' && id ? (
-                           <>
-                             <img src={`https://img.youtube.com/vi/${id}/hqdefault.jpg`} alt={vid.title} className="w-full h-48 object-cover group-hover:opacity-80 transition-opacity" />
-                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"><div className="bg-black/50 rounded-full p-3"><Play className="w-8 h-8 text-white fill-current"/></div></div>
-                           </>
-                       ) : (
-                           <div className="w-full h-48 bg-gray-700 flex flex-col items-center justify-center group-hover:bg-gray-600 transition-colors"><Video className="w-12 h-12 text-gray-500 mb-2" /><span className="text-gray-400 font-bold text-sm">Watch on {label}</span></div>
-                       )}
-                    </a>
-                    <div className="p-4"><h3 className="font-bold text-white text-lg mb-1">{vid.title}</h3><a href={vid.url} target="_blank" rel="noreferrer" className="text-pink-400 text-sm flex items-center gap-1 hover:underline"><ExternalLink className="w-4 h-4" /> Open Link</a></div>
+               {/* Hydration */}
+               <div>
+                  <label className="text-xs text-gray-500 mb-2 block flex items-center gap-1"><Droplets className="w-3 h-3 text-blue-400"/> Water Bottles</label>
+                  <div className="flex items-center gap-4 bg-gray-900 p-2 rounded-lg justify-center">
+                    <button onClick={() => setHydration(Math.max(0, hydration - 1))} className="w-8 h-8 bg-gray-700 rounded text-white">-</button>
+                    <span className="text-xl font-mono font-bold">{hydration}</span>
+                    <button onClick={() => setHydration(hydration + 1)} className="w-8 h-8 bg-gray-700 rounded text-white">+</button>
                   </div>
-                )})}
+               </div>
             </div>
-         )}
 
-         {activeTab === 'calendar' && (
-            <div className="space-y-3 animate-in fade-in">
-              <h2 className="text-2xl font-bold text-white mb-4">Schedule</h2>
-              <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 p-1">
-                 <iframe src={`https://calendar.google.com/calendar/embed?src=${encodeURIComponent(GOOGLE_CALENDAR_ID)}&ctz=America%2FChicago&mode=AGENDA&showTitle=0&showNav=1&showDate=1&showPrint=0&showTabs=0&showCalendars=0&theme=DARK`} style={{border: 0, width: "100%", height: "400px"}} frameBorder="0" scrolling="no"></iframe>
+            {/* Balance Section */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">2. The 6 Balance Check (1-10)</h3>
+               <div className="space-y-4">
+                 {[
+                   { id: 'faith', label: 'Faith / Spiritual', icon: <BookOpen className="w-4 h-4 text-purple-400"/> },
+                   { id: 'family', label: 'Family', icon: <Users className="w-4 h-4 text-blue-400"/> },
+                   { id: 'fitness', label: 'Fitness', icon: <Dumbbell className="w-4 h-4 text-red-400"/> },
+                   { id: 'finances', label: 'Finances', icon: <DollarSign className="w-4 h-4 text-green-400"/> },
+                   { id: 'academics', label: 'Academics', icon: <GraduationCap className="w-4 h-4 text-yellow-400"/> },
+                   { id: 'fun', label: 'Fun', icon: <PartyPopper className="w-4 h-4 text-pink-400"/> },
+                 ].map(item => (
+                   <div key={item.id}>
+                     <div className="flex justify-between text-xs mb-1">
+                       <span className="flex items-center gap-2 text-gray-300">{item.icon} {item.label}</span>
+                       <span className="font-mono text-white">{balance[item.id as keyof typeof balance]}</span>
+                     </div>
+                     <input 
+                       type="range" min="1" max="10" 
+                       value={balance[item.id as keyof typeof balance]} 
+                       onChange={(e) => setBalance({...balance, [item.id]: parseInt(e.target.value)})}
+                       className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                     />
+                   </div>
+                 ))}
+               </div>
+            </div>
+
+            {/* Mental Grind */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">3. The Mental Grind</h3>
+               <div className="space-y-3">
+                 <div>
+                   <label className="text-xs text-white block mb-1">What is the 1% specific thing I improved today?</label>
+                   <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white" value={mentalImprovement} onChange={e => setMentalImprovement(e.target.value)} />
+                 </div>
+                 <div>
+                   <label className="text-xs text-white block mb-1">Teammate Check: Who did I help?</label>
+                   <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white" value={mentalTeammate} onChange={e => setMentalTeammate(e.target.value)} />
+                 </div>
+               </div>
+            </div>
+
+            <button onClick={submitDaily} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Daily Log</button>
+          </div>
+        )}
+
+        {/* --- TAB 2: MATCH DAY --- */}
+        {activeTab === 'match' && (
+          <div className="space-y-6 animate-in fade-in">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Event Name</label>
+                <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" placeholder="e.g. Regional Tournament" value={matchEvent} onChange={e => setMatchEvent(e.target.value)} />
               </div>
-              <a href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(GOOGLE_CALENDAR_ID)}`} target="_blank" rel="noreferrer" className="block w-full text-center bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-xl transition-all">+ Add to My Calendar</a>
-            </div>
-         )}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Opponent</label>
+                  <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchOpponent} onChange={e => setMatchOpponent(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Result</label>
+                  <select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchResult} onChange={e => setMatchResult(e.target.value)}>
+                    <option>Win</option>
+                    <option>Loss</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="pt-4 border-t border-gray-700">
+                <h3 className="text-sm font-bold text-white mb-2">Win or Learn</h3>
+                <div className="mb-3">
+                  <label className="text-xs text-gray-400 block mb-1">What went well?</label>
+                  <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Setups, motion, attitude..." value={matchWell} onChange={e => setMatchWell(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 block mb-1">What did I learn?</label>
+                  <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Technical fixes, mindset gaps..." value={matchLearn} onChange={e => setMatchLearn(e.target.value)} />
+                </div>
+              </div>
 
-         {activeTab === 'stats' && (
-             <div className="space-y-4 animate-in fade-in">
-                 <h2 className="text-2xl font-bold text-white">My History</h2>
-                 {currentStudent ? (
-                    <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-                       {studentHistory.length === 0 && <div className="text-gray-500 text-center py-4">No history found yet.</div>}
-                       <div className="space-y-2">
-                          {studentHistory.map((h, i) => (
-                             <div key={i} className="flex justify-between items-center bg-gray-900/50 p-3 rounded-lg">
-                                <span className="text-gray-400 text-sm">{h.date}</span>
-                                <span className="font-mono font-bold text-white">{h.weight}</span>
-                             </div>
-                          ))}
-                       </div>
-                    </div>
-                 ) : <div className="text-center text-gray-500">Loading stats...</div>}
+              <button onClick={submitMatch} disabled={loading} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg">Log Match</button>
+            </div>
+          </div>
+        )}
+
+        {/* --- TAB 3: SUNDAY LAUNCH --- */}
+        {activeTab === 'sunday' && (
+          <div className="space-y-6 animate-in fade-in">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Sunday Launch</h2>
+            
+            {/* Focus Grid Game */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
+               <div className="flex justify-between items-center mb-4">
+                 <h3 className="text-sm font-bold text-white">1. Concentration Grid</h3>
+                 {focusState === 'playing' && <span className="font-mono text-xl text-yellow-400">{focusTime}s</span>}
+               </div>
+
+               {focusState === 'idle' ? (
+                 <button onClick={startFocus} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto"><Play className="w-4 h-4"/> Start Grid (00-99)</button>
+               ) : focusState === 'finished' ? (
+                 <div>
+                   <p className="text-2xl font-bold text-white mb-2">Time: {focusTime}s</p>
+                   <button onClick={() => setFocusState('idle')} className="text-gray-400 text-xs underline">Reset</button>
+                 </div>
+               ) : (
+                 <div>
+                   <div className="flex justify-between text-xs text-gray-400 mb-2"><span>Find: <b className="text-white text-lg">{focusNextNumber}</b></span></div>
+                   <div className="grid grid-cols-10 gap-1">
+                     {focusGrid.map(num => (
+                       <button key={num} onTouchStart={(e) => { e.preventDefault(); tapFocusNumber(num); }} onClick={() => tapFocusNumber(num)} className={`aspect-square flex items-center justify-center text-[10px] font-bold rounded ${num < focusNextNumber ? 'bg-green-900 text-green-500' : 'bg-gray-700 text-white active:bg-blue-500'}`}>{num}</button>
+                     ))}
+                   </div>
+                 </div>
+               )}
+            </div>
+
+            {/* Weekly Check In */}
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
+               <h3 className="text-sm font-bold text-white">2. Weekly Check-In</h3>
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <label className="text-xs text-gray-500 block">Big Tests/Projects?</label>
+                   <select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={weeklyAcademic} onChange={e => setWeeklyAcademic(e.target.value)}><option>Yes</option><option>No</option></select>
+                 </div>
+                 <div>
+                   <label className="text-xs text-gray-500 block">On Weight Target?</label>
+                   <select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={weeklyWeight} onChange={e => setWeeklyWeight(e.target.value)}><option>Yes</option><option>No</option></select>
+                 </div>
+               </div>
+               <div>
+                  <label className="text-xs text-gray-500 block mb-1">Body Recovery (1-10)</label>
+                  <input type="range" min="1" max="10" className="w-full" value={weeklyRecovery} onChange={e => setWeeklyRecovery(parseInt(e.target.value))} />
+                  <div className="text-right font-mono text-blue-400">{weeklyRecovery}</div>
+               </div>
+               <div>
+                  <label className="text-xs text-gray-500 block mb-1">#1 Goal for this week</label>
+                  <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={weeklyGoal} onChange={e => setWeeklyGoal(e.target.value)} />
+               </div>
+               <button onClick={submitWeekly} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">Submit Launch</button>
+            </div>
+          </div>
+        )}
+
+        {/* --- TAB 4: MY FOUNDATION --- */}
+        {activeTab === 'foundation' && (
+          <div className="space-y-6 animate-in fade-in">
+             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Target className="w-5 h-5 text-pink-500"/> My Foundation</h2>
+             
+             {/* Identity */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">1. My Identity (I am...)</h3>
+               <div className="space-y-2">
+                 {identityWords.map((word, i) => (
+                   <input key={i} type="text" placeholder={`I am...`} className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} />
+                 ))}
+               </div>
              </div>
-         )}
+
+             {/* Whys */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">2. Find Your Why</h3>
+               <div className="space-y-3">
+                 <div>
+                   <label className="text-xs text-blue-400 block mb-1">Level 1: Why did you join?</label>
+                   <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[0]} onChange={e => { const n = [...whyLevels]; n[0] = e.target.value; setWhyLevels(n); }} />
+                 </div>
+                 <div>
+                   <label className="text-xs text-blue-400 block mb-1">Level 2: Why is that important?</label>
+                   <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[1]} onChange={e => { const n = [...whyLevels]; n[1] = e.target.value; setWhyLevels(n); }} />
+                 </div>
+                 <div>
+                   <label className="text-xs text-blue-400 block mb-1">Level 3: The Root Cause</label>
+                   <input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={whyLevels[2]} onChange={e => { const n = [...whyLevels]; n[2] = e.target.value; setWhyLevels(n); }} />
+                 </div>
+               </div>
+               <div className="mt-4">
+                 <label className="text-xs text-white font-bold block mb-1">Official Purpose Statement</label>
+                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} />
+               </div>
+             </div>
+
+             {/* Values (Read Only) */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 opacity-75">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">3. Team Values</h3>
+               <ul className="text-sm text-gray-300 space-y-2">
+                 <li><b>Consistent:</b> In routines. Team &gt; Self. 1% Better.</li>
+                 <li><b>Persistent:</b> Helping others. Sticking with it.</li>
+                 <li><b>Resilient:</b> Rubber Band Theory. Respond vs React. Opportunity &gt; Obstacle.</li>
+                 <li><b>Relentless:</b> Waking up & Growing. Attacking the day.</li>
+               </ul>
+             </div>
+
+             <button onClick={saveFoundation} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg">Save Foundation</button>
+          </div>
+        )}
+
+        {/* --- TAB 5: CONFIDENCE BANK --- */}
+        {activeTab === 'bank' && (
+           <div className="space-y-6 animate-in fade-in">
+             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500"/> Confidence Bank</h2>
+             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                {confidenceDeposits.length === 0 ? (
+                  <div className="p-8 text-center text-gray-500">
+                    <Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/>
+                    <p>No deposits yet. Start logging your 1% improvements!</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-gray-700">
+                    {confidenceDeposits.map(d => (
+                      <div key={d.id} className="p-4">
+                        <div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div>
+                        <div className="text-white text-sm">{d.improvement}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+             </div>
+           </div>
+        )}
+
       </div>
 
+      {/* NAV BAR */}
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40">
-         <button onClick={() => setActiveTab('checkin')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'checkin' ? 'text-pink-500' : 'text-gray-500'}`}><CheckCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold uppercase">Check In</span></button>
-         <button onClick={() => setActiveTab('focus')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'focus' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Focus</span></button>
-         <button onClick={() => setActiveTab('journal')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'journal' ? 'text-pink-500' : 'text-gray-500'}`}><BookOpen className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Mindset</span></button>
-         <button onClick={() => setActiveTab('resources')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'resources' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Videos</span></button>
-         <button onClick={() => setActiveTab('calendar')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'calendar' ? 'text-pink-500' : 'text-gray-500'}`}><Calendar className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Schedule</span></button>
-         <button onClick={() => { setActiveTab('stats'); if(currentStudent) loadStudentStats(currentStudent); }} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'stats' ? 'text-pink-500' : 'text-gray-500'}`}><TrendingUp className="w-5 h-5"/><span className="text-[8px] mt-1 font-bold uppercase">Stats</span></button>
+         <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
+         <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
+         <button onClick={() => setActiveTab('sunday')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'sunday' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Launch</span></button>
+         <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
+         <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
       </div>
     </div>
   );
