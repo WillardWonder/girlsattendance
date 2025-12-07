@@ -8,7 +8,7 @@ import {
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star
+  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -29,6 +29,13 @@ const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453
 const COACH_ACCESS_CODE = "bluejays"; // Hardcoded access code
 const APPROVED_COACH_EMAILS = ["coach@example.com", "admin@school.edu"]; // Auto-approved emails
 const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendance/main/merrill-logo.png"; // GitHub raw link
+
+// --- EVENTS FOR COUNTDOWN ---
+const MAJOR_EVENTS = [
+  { name: "Girls Regionals", date: new Date("2026-02-13T09:00:00") },
+  { name: "Girls Sectionals", date: new Date("2026-02-20T09:00:00") },
+  { name: "Girls State", date: new Date("2026-02-26T09:00:00") }
+];
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
@@ -64,6 +71,8 @@ const App = () => {
   const [resources, setResources] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
+  const [countdownString, setCountdownString] = useState('');
+  const [nextEventName, setNextEventName] = useState('');
 
   // --- FORUM / DISCUSSION STATE ---
   const [showForum, setShowForum] = useState(false);
@@ -383,14 +392,12 @@ const App = () => {
             if (data.whys) setWhyLevels(data.whys);
             if (data.purpose) setPurposeStatement(data.purpose);
             
+            // Check if profile incomplete, but allow navigation
             if (!data.identity || data.identity[0] === '') {
-               setActiveTab('foundation');
-               setFoundationLocked(false);
-            } else {
-               setFoundationLocked(true); 
-               setActiveTab('daily');
-            }
+               // Optional: could force foundation tab here, but keeping user flexible
+            } 
           } else {
+            // New user without profile
             setActiveTab('foundation');
             setFoundationLocked(false);
           }
@@ -400,7 +407,39 @@ const App = () => {
       }
       setAuthLoading(false);
     });
-    return () => unsubscribe();
+    
+    // SAFETY TIMEOUT: If auth takes too long (black screen issue), force stop loading
+    const timer = setTimeout(() => setAuthLoading(false), 3000);
+
+    return () => {
+        unsubscribe();
+        clearTimeout(timer);
+    };
+  }, []);
+
+  // Countdown Timer Effect
+  useEffect(() => {
+    const updateCountdown = () => {
+      const now = new Date();
+      // Find the first event that is in the future
+      const upcoming = MAJOR_EVENTS.find(e => e.date > now);
+      
+      if (upcoming) {
+        setNextEventName(upcoming.name);
+        const diff = upcoming.date.getTime() - now.getTime();
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setCountdownString(`${days}d ${hours}h ${minutes}m`);
+      } else {
+        setNextEventName("Season Complete");
+        setCountdownString("");
+      }
+    };
+
+    updateCountdown(); // Initial call
+    const interval = setInterval(updateCountdown, 60000); // Update every minute
+    return () => clearInterval(interval);
   }, []);
 
   // Focus Timer
@@ -801,7 +840,12 @@ const App = () => {
              {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
              <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getCurrentName().split(' ')[1] || 'Athlete'}!</p></div>
          </div>
-         <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700"><LogOut className="w-4 h-4 text-gray-400"/></button>
+         {/* Countdown Display */}
+         <div className="text-right">
+            <p className="text-[10px] text-gray-400 uppercase tracking-wide">Next: {nextEventName}</p>
+            <p className="text-sm font-mono font-bold text-pink-500">{countdownString}</p>
+         </div>
+         <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
       <div className="p-4 max-w-lg mx-auto">
@@ -956,7 +1000,90 @@ const App = () => {
           </div>
         )}
 
-        {/* --- TAB 2: MATCH DAY --- */}
+        {/* --- TAB 4: FOUNDATION --- */}
+        {activeTab === 'foundation' && (
+          <div className="space-y-6 animate-in fade-in">
+             <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Target className="w-5 h-5 text-pink-500"/> My Profile</h2>
+                {foundationLocked && <button onClick={() => setFoundationLocked(false)} className="text-xs bg-gray-800 px-3 py-1 rounded text-white flex items-center gap-1"><Unlock className="w-3 h-3"/> Unlock & Edit</button>}
+             </div>
+
+             {/* Career Stats Card */}
+             <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-5 rounded-2xl border border-gray-700 shadow-lg">
+                <div className="flex justify-between items-start mb-4">
+                   <div>
+                      <h3 className="text-lg font-bold text-white">{userProfile?.First_Name} {userProfile?.Last_Name}</h3>
+                      <p className="text-xs text-gray-400">Class of 20{userProfile?.Grade ? 32 - (userProfile.Grade - 5) : '??'}</p>
+                   </div>
+                   <div className="bg-pink-900/30 p-2 rounded-lg">
+                      <Trophy className="w-6 h-6 text-pink-500" />
+                   </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 text-center">
+                   <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
+                      <div className="text-2xl font-bold text-white">{studentHistory.length}</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider">Check-ins</div>
+                   </div>
+                   <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
+                      <div className="text-2xl font-bold text-blue-400">{confidenceDeposits.filter(d => d.type === 'win').length}</div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider">Wins Logged</div>
+                   </div>
+                   <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
+                      <div className="text-2xl font-bold text-green-400">
+                         {studentHistory.length > 0 ? Math.round(studentHistory.reduce((acc, curr) => acc + (curr.sleep?.hours ? parseFloat(curr.sleep.hours) : 0), 0) / studentHistory.length) : '-'}
+                      </div>
+                      <div className="text-[10px] text-gray-400 uppercase tracking-wider">Avg Sleep</div>
+                   </div>
+                </div>
+             </div>
+
+             {/* Identity Section */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><UserCheck className="w-4 h-4"/> 1. My Identity</h3>
+               <p className="text-[10px] text-gray-500 mb-2">I am...</p>
+               <div className="space-y-2">{identityWords.map((word, i) => <div key={i} className="flex gap-2 items-center"><span className="text-gray-600 text-xs font-mono">{i+1}.</span><input type="text" disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} /></div>)}</div>
+             </div>
+
+             {/* The 3 Whys Section */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><HelpCircle className="w-4 h-4"/> 2. The 3 Whys</h3>
+               <div className="space-y-4">
+                  <div>
+                     <label className="text-[10px] text-blue-400 uppercase font-bold block mb-1">Level 1: Surface (Why wrestle?)</label>
+                     <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-16 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={whyLevels[0]} onChange={e => { const n = [...whyLevels]; n[0] = e.target.value; setWhyLevels(n); }} placeholder="To get strong, to win medals..." />
+                  </div>
+                  <div>
+                     <label className="text-[10px] text-blue-400 uppercase font-bold block mb-1">Level 2: Deeper (Why does that matter?)</label>
+                     <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-16 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={whyLevels[1]} onChange={e => { const n = [...whyLevels]; n[1] = e.target.value; setWhyLevels(n); }} placeholder="To prove I can do hard things..." />
+                  </div>
+                  <div>
+                     <label className="text-[10px] text-pink-500 uppercase font-bold block mb-1">Level 3: Core (The real reason)</label>
+                     <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-16 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={whyLevels[2]} onChange={e => { const n = [...whyLevels]; n[2] = e.target.value; setWhyLevels(n); }} placeholder="Because I refuse to be average..." />
+                  </div>
+               </div>
+             </div>
+
+             {/* Purpose Statement */}
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
+               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><Target className="w-4 h-4"/> 3. Purpose Statement</h3>
+               <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-24 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} placeholder="I wrestle to..." />
+             </div>
+
+             {!foundationLocked && <button onClick={saveFoundation} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg">Save Foundation</button>}
+          </div>
+        )}
+
+        {/* --- TAB 5: BANK --- */}
+        {activeTab === 'bank' && (
+           <div className="space-y-6 animate-in fade-in">
+             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500"/> Confidence Bank</h2>
+             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
+                {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.text}"</div></div>)}</div>}
+             </div>
+           </div>
+        )}
+
+        {/* --- TAB: MATCH DAY --- */}
         {activeTab === 'match' && !showForum && (
           <div className="space-y-6 animate-in fade-in">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
@@ -978,105 +1105,6 @@ const App = () => {
             </div>
             )}
           </div>
-        )}
-
-        {/* --- TAB 3: WEEKLY CHECK-IN --- */}
-        {activeTab === 'weekly' && (
-          <div className="space-y-6 animate-in fade-in">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Weekly Check-In</h2>
-            {weeklyComplete ? (
-              <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
-                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
-                <h3 className="text-2xl font-bold text-white mb-2">Ready to Launch!</h3>
-                <button onClick={() => setWeeklyComplete(false)} className="text-gray-400 text-xs underline">Edit Entry</button>
-              </div>
-            ) : (
-             <>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
-               <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white">1. Concentration Grid</h3>{focusState === 'playing' && <span className="font-mono text-xl text-yellow-400">{Math.floor(focusTimeLeft / 60)}:{(focusTimeLeft % 60).toString().padStart(2, '0')}</span>}</div>
-               {focusState === 'idle' ? (
-                 <button onClick={startFocus} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto"><Play className="w-4 h-4"/> Start Grid (00-99)</button>
-               ) : focusState === 'finished' ? (
-                 <div><p className="text-2xl font-bold text-white mb-2">Score: {focusScore}</p><p className="text-xs text-gray-400">Time's Up!</p><button onClick={() => setFocusState('idle')} className="text-gray-400 text-xs underline mt-2">Reset</button></div>
-               ) : (
-                 <div><div className="flex justify-between text-xs text-gray-400 mb-2"><span>Find: <b className="text-white text-lg">{focusNextNumber}</b></span></div><div className="grid grid-cols-10 gap-1">{focusGrid.map(num => <button key={num} onTouchStart={(e) => { e.preventDefault(); tapFocusNumber(num); }} onClick={() => tapFocusNumber(num)} className={`aspect-square flex items-center justify-center text-[10px] font-bold rounded ${num < focusNextNumber ? 'bg-green-900 text-green-500' : 'bg-gray-700 text-white active:bg-blue-500'}`}>{num}</button>)}</div></div>
-               )}
-            </div>
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
-               <h3 className="text-sm font-bold text-white">2. Weekly Check-In</h3>
-               
-               {/* Academic */}
-               <div>
-                 <label className="text-xs text-gray-400 block mb-2">Grades / Academics on track?</label>
-                 <div className="flex gap-2">
-                   {['Yes', 'No'].map(opt => (
-                     <button key={opt} onClick={() => setWeeklyAcademic(opt)} 
-                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyAcademic === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
-                       {opt}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               {/* Weight */}
-               <div>
-                 <label className="text-xs text-gray-400 block mb-2">Weight Management on track?</label>
-                 <div className="flex gap-2">
-                   {['Yes', 'No'].map(opt => (
-                     <button key={opt} onClick={() => setWeeklyWeight(opt)} 
-                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyWeight === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
-                       {opt}
-                     </button>
-                   ))}
-                 </div>
-               </div>
-
-               {/* Recovery */}
-               <div>
-                 <label className="text-xs text-gray-400 block mb-2">Recovery Level (1-10)</label>
-                 <input type="range" min="1" max="10" className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" 
-                   value={weeklyRecovery} onChange={e => setWeeklyRecovery(parseInt(e.target.value))} />
-                 <div className="text-center text-xl font-bold text-blue-400 mt-1">{weeklyRecovery}</div>
-               </div>
-
-               {/* Goal */}
-               <div>
-                 <label className="text-xs text-gray-400 block mb-1">Weekly Goal</label>
-                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" 
-                   placeholder="One specific thing to improve..." value={weeklyGoal} onChange={e => setWeeklyGoal(e.target.value)} />
-               </div>
-
-               <button onClick={submitWeekly} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">Submit Launch</button>
-            </div>
-            </>
-            )}
-          </div>
-        )}
-
-        {/* --- TAB 4: FOUNDATION --- */}
-        {activeTab === 'foundation' && (
-          <div className="space-y-6 animate-in fade-in">
-             <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2"><Target className="w-5 h-5 text-pink-500"/> My Foundation</h2>
-                {foundationLocked && <button onClick={() => setFoundationLocked(false)} className="text-xs bg-gray-800 px-3 py-1 rounded text-white flex items-center gap-1"><Unlock className="w-3 h-3"/> Unlock & Edit</button>}
-             </div>
-             {/* Profile content omitted for brevity, but same as previous */}
-             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3">1. My Identity</h3>
-               <div className="space-y-2">{identityWords.map((word, i) => <div key={i} className="flex gap-2 items-center"><span className="text-gray-600 text-xs font-mono">{i+1}.</span><input type="text" disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} /></div>)}</div>
-             </div>
-             {!foundationLocked && <button onClick={saveFoundation} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg">Save Foundation</button>}
-          </div>
-        )}
-
-        {/* --- TAB 5: BANK --- */}
-        {activeTab === 'bank' && (
-           <div className="space-y-6 animate-in fade-in">
-             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500"/> Confidence Bank</h2>
-             <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
-                {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.text}"</div></div>)}</div>}
-             </div>
-           </div>
         )}
 
         {/* --- TAB 6: LIBRARY (Updated Grid Layout) --- */}
