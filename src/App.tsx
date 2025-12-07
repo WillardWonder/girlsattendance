@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword, sendPasswordResetEmail, browserLocalPersistence, setPersistence } from 'firebase/auth';
-import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { getFirestore, collection, addDoc, getDocs, query, orderBy, doc, where, deleteDoc, limit, setDoc, getDoc, writeBatch, updateDoc, arrayUnion, arrayRemove, onSnapshot } from 'firebase/firestore';
 import { 
   CheckCircle, AlertCircle, Calendar, Clock, 
   Trash2, Lock, Unlock, BarChart3, Download, ChevronDown, ChevronUp, Copy, Check, 
@@ -243,10 +243,13 @@ const App = () => {
          if(data.gratitude) {
             dailyDeposits.push({ id: d.id + '_grat', date: data.date, text: `Gratitude: ${data.gratitude}`, type: 'gratitude' });
          }
+         // Capture Profile/Foundation logs
+         if(data.type === 'foundation_log') {
+             dailyDeposits.push({ id: d.id + '_fnd', date: data.date, text: `Foundation: ${data.mentalImprovement}`, type: 'foundation' });
+         }
       });
 
       // 2. Match Logs (Wins & Reflections)
-      // Removed "Win" filter to catch "what went well" even in losses
       const q2 = query(collection(db, "match_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
       const snap2 = await getDocs(q2);
       const matchDeposits: any[] = [];
@@ -377,8 +380,9 @@ const App = () => {
     }
   }, [appMode, isCoachAuthenticated, adminTab, user]);
 
+  // Auth & Profile Listener
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
         // Auto-detect coach by email
@@ -386,41 +390,49 @@ const App = () => {
              setAppMode('coach');
              setIsCoachAuthenticated(true);
         }
-
-        try {
-          const docRef = doc(db, "user_profiles", currentUser.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
-            setUserProfile(data);
-            if (data.identity) setIdentityWords(data.identity);
-            if (data.whys) setWhyLevels(data.whys);
-            if (data.purpose) setPurposeStatement(data.purpose);
-            
-            // Check if profile incomplete, but allow navigation
-            if (!data.identity || data.identity[0] === '') {
-               // Optional: could force foundation tab here, but keeping user flexible
-            } 
-          } else {
-            // New user without profile
-            setActiveTab('foundation');
-            setFoundationLocked(false);
-          }
-          loadConfidenceBank(currentUser.uid);
-          loadStudentStats(currentUser.uid);
-        } catch(e) { console.error(e); }
+      } else {
+        setUserProfile(null);
       }
       setAuthLoading(false);
     });
-    
-    // SAFETY TIMEOUT: If auth takes too long (black screen issue), force stop loading
-    const timer = setTimeout(() => setAuthLoading(false), 3000);
 
-    return () => {
-        unsubscribe();
-        clearTimeout(timer);
-    };
+    return () => unsubscribeAuth();
   }, []);
+
+  // Data Listener (Dependent on User)
+  useEffect(() => {
+    if (!user) return;
+
+    // Real-time listener for profile changes (Fixes "Athlete" name issue and ensures profile data is loaded)
+    const docRef = doc(db, "user_profiles", user.uid);
+    const unsubscribeProfile = onSnapshot(docRef, (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserProfile(data);
+            // Sync local state
+            if(data.identity) setIdentityWords(data.identity);
+            if(data.whys) setWhyLevels(data.whys);
+            if(data.purpose) setPurposeStatement(data.purpose);
+
+            // Redirect Logic: If profile is new/empty, force them to Foundation tab
+            if (!data.identity || data.identity[0] === '' || data.identity.length === 0) {
+                 setFoundationLocked(false);
+                 setActiveTab(prev => (prev === 'daily' ? 'foundation' : prev));
+            } else {
+                 setFoundationLocked(true);
+            }
+        } else {
+            // Document doesn't exist yet (registration race condition), force foundation
+            setActiveTab('foundation');
+            setFoundationLocked(false);
+        }
+    });
+
+    loadConfidenceBank(user.uid);
+    loadStudentStats(user.uid);
+
+    return () => unsubscribeProfile();
+  }, [user]);
 
   // Countdown Timer Effect
   useEffect(() => {
@@ -500,10 +512,27 @@ const App = () => {
         await signInWithEmailAndPassword(auth, emailClean, passClean);
       } else {
         const cred = await createUserWithEmailAndPassword(auth, emailClean, passClean);
-        let fName = "Athlete"; let lName = "New";
-        const parts = emailClean.split('@')[0].split('.');
-        if(parts.length > 1) { fName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1); lName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1); }
-        await setDoc(doc(db, "user_profiles", cred.user.uid), { email: emailClean, First_Name: fName, Last_Name: lName, joined: new Date().toISOString(), identity: ['', '', '', '', ''], whys: ['', '', ''], purpose: '' });
+        
+        // Better Name Extraction
+        let fName = "Athlete"; let lName = "";
+        const namePart = emailClean.split('@')[0];
+        const parts = namePart.split('.'); // try first.last
+        if(parts.length > 1) { 
+             fName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1); 
+             lName = parts[1].charAt(0).toUpperCase() + parts[1].slice(1); 
+        } else {
+             fName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        }
+
+        await setDoc(doc(db, "user_profiles", cred.user.uid), { 
+            email: emailClean, 
+            First_Name: fName, 
+            Last_Name: lName, 
+            joined: new Date().toISOString(), 
+            identity: ['', '', '', '', ''], 
+            whys: ['', '', ''], 
+            purpose: '' 
+        });
         await addDoc(collection(db, "roster"), { First_Name: fName, Last_Name: lName, Email: emailClean });
       }
     } catch (err: any) { 
@@ -590,6 +619,19 @@ const App = () => {
     const data = { identity: identityWords, whys: whyLevels, purpose: purposeStatement, updated: new Date().toISOString() };
     await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
     setUserProfile({ ...userProfile, ...data }); setSuccessMsg("Foundation Saved."); setFoundationLocked(true);
+    
+    // BUILD BANK: Add a positive log entry for completing the profile
+    try {
+        await addDoc(collection(db, "daily_logs"), {
+            uid: user.uid, 
+            date: new Date().toLocaleDateString(),
+            timestamp: new Date().toISOString(),
+            type: 'foundation_log',
+            mentalImprovement: "Defined my Core Values, Whys, and Purpose."
+        });
+        loadConfidenceBank(user.uid); // Refresh bank immediately
+    } catch(e) { console.error("Bank build error", e); }
+
     setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
