@@ -8,7 +8,7 @@ import {
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer
+  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer, Menu, Grid
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -225,6 +225,12 @@ const App = () => {
             : [...(userProfile.favorites || []), videoId];
         setUserProfile({...userProfile, favorites: newFavs});
     } catch(e) { console.error("Fav toggle error", e); }
+  };
+
+  // Function to handle tab switching with scroll reset (Fixes black/empty page issues)
+  const switchTab = (tabName: string) => {
+      setActiveTab(tabName);
+      window.scrollTo(0, 0); // Force scroll to top
   };
 
   // --- ASYNC DATA ACTIONS ---
@@ -619,6 +625,19 @@ const App = () => {
     const data = { identity: identityWords, whys: whyLevels, purpose: purposeStatement, updated: new Date().toISOString() };
     await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
     setUserProfile({ ...userProfile, ...data }); setSuccessMsg("Foundation Saved."); setFoundationLocked(true);
+    
+    // BUILD BANK: Add a positive log entry for completing the profile
+    try {
+        await addDoc(collection(db, "daily_logs"), {
+            uid: user.uid, 
+            date: new Date().toLocaleDateString(),
+            timestamp: new Date().toISOString(),
+            type: 'foundation_log',
+            mentalImprovement: "Defined my Core Values, Whys, and Purpose."
+        });
+        loadConfidenceBank(user.uid); // Refresh bank immediately
+    } catch(e) { console.error("Bank build error", e); }
+
     setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
@@ -875,7 +894,6 @@ const App = () => {
                {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
                <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getFirstName()}!</p></div>
              </div>
-             <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
            </div>
            {/* Countdown Row */}
            <div className="flex gap-2 justify-between bg-black/30 p-2 rounded-lg overflow-x-auto">
@@ -905,7 +923,7 @@ const App = () => {
                 <p className="text-white text-sm">{announcements[0].message}</p>
                 <div className="flex justify-between items-center mt-3">
                    <p className="text-pink-500/50 text-[10px]">{announcements[0].date}</p>
-                   <button onClick={() => setActiveTab('teamtalk')} className="text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"><MessageCircle className="w-3 h-3"/> Team Talk</button>
+                   <button onClick={() => switchTab('teamtalk')} className="text-xs bg-pink-500/20 hover:bg-pink-500/30 text-pink-300 px-3 py-1 rounded-full flex items-center gap-1 transition-colors"><MessageCircle className="w-3 h-3"/> Team Talk</button>
                 </div>
               </div>
             )}
@@ -919,7 +937,7 @@ const App = () => {
                 <button onClick={() => setDailyComplete(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto"><Edit3 className="w-4 h-4"/> Edit / New Entry</button>
               </div>
             ) : (
-            <div className="max-w-lg mx-auto space-y-6">
+            <>
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">1. Pre-Practice Check</h3>
                <div className="grid grid-cols-2 gap-4 mb-4">
@@ -958,14 +976,14 @@ const App = () => {
                </div>
             </div>
             <button onClick={submitDaily} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Daily Log</button>
-            </div>
+            </>
             )}
           </div>
         )}
 
         {/* --- TAB: TEAM TALK --- */}
         {activeTab === 'teamtalk' && (
-          <div className="space-y-4 animate-in fade-in pb-20">
+          <div className="space-y-4 animate-in fade-in pb-20 max-w-xl mx-auto">
              <h2 className="text-xl font-bold text-white flex items-center gap-2"><MessageCircle className="w-5 h-5 text-pink-500"/> Team Talk</h2>
              
              {!activePost ? (
@@ -1011,7 +1029,7 @@ const App = () => {
                    </div>
 
                    {/* Input Area */}
-                   <div className="p-3 border-t border-gray-700 bg-gray-900 rounded-b-xl flex gap-2 max-w-5xl mx-auto left-0 right-0">
+                   <div className="p-3 border-t border-gray-700 bg-gray-900 rounded-b-xl flex gap-2">
                       <input 
                         type="text" 
                         className="flex-1 bg-gray-800 border border-gray-600 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
@@ -1031,7 +1049,7 @@ const App = () => {
         
         {/* --- TAB: SCHEDULE (New) --- */}
         {activeTab === 'schedule' && (
-          <div className="space-y-6 animate-in fade-in pb-20">
+          <div className="space-y-6 animate-in fade-in pb-20 max-w-xl mx-auto">
             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Calendar className="w-5 h-5 text-purple-500"/> Team Schedule</h2>
             <div className="bg-gray-800 rounded-xl overflow-hidden border border-gray-700 h-[60vh]">
                 <iframe 
@@ -1048,7 +1066,7 @@ const App = () => {
 
         {/* --- TAB 4: FOUNDATION --- */}
         {activeTab === 'foundation' && (
-          <div className="space-y-6 animate-in fade-in">
+          <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
              <div className="flex justify-between items-center">
                 <h2 className="text-xl font-bold text-white flex items-center gap-2"><Target className="w-5 h-5 text-pink-500"/> My Profile</h2>
                 {foundationLocked && <button onClick={() => setFoundationLocked(false)} className="text-xs bg-gray-800 px-3 py-1 rounded text-white flex items-center gap-1"><Unlock className="w-3 h-3"/> Unlock & Edit</button>}
@@ -1121,12 +1139,109 @@ const App = () => {
 
         {/* --- TAB 5: BANK --- */}
         {activeTab === 'bank' && (
-           <div className="space-y-6 animate-in fade-in">
+           <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
              <h2 className="text-xl font-bold text-white flex items-center gap-2"><Trophy className="w-5 h-5 text-yellow-500"/> Confidence Bank</h2>
              <div className="bg-gray-800 rounded-xl border border-gray-700 overflow-hidden">
                 {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.text}"</div></div>)}</div>}
              </div>
            </div>
+        )}
+
+        {/* --- TAB: WEEKLY CHECK-IN --- */}
+        {activeTab === 'weekly' && (
+          <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Weekly Check-In</h2>
+            {weeklyComplete ? (
+              <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
+                <h3 className="text-2xl font-bold text-white mb-2">Ready to Launch!</h3>
+                <button onClick={() => setWeeklyComplete(false)} className="text-gray-400 text-xs underline">Edit Entry</button>
+              </div>
+            ) : (
+             <>
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 text-center">
+               <div className="flex justify-between items-center mb-4"><h3 className="text-sm font-bold text-white">1. Concentration Grid</h3>{focusState === 'playing' && <span className="font-mono text-xl text-yellow-400">{Math.floor(focusTimeLeft / 60)}:{(focusTimeLeft % 60).toString().padStart(2, '0')}</span>}</div>
+               {focusState === 'idle' ? (
+                 <button onClick={startFocus} className="bg-green-600 text-white px-6 py-3 rounded-lg font-bold flex items-center gap-2 mx-auto"><Play className="w-4 h-4"/> Start Grid (00-99)</button>
+               ) : focusState === 'finished' ? (
+                 <div><p className="text-2xl font-bold text-white mb-2">Score: {focusScore}</p><p className="text-xs text-gray-400">Time's Up!</p><button onClick={() => setFocusState('idle')} className="text-gray-400 text-xs underline mt-2">Reset</button></div>
+               ) : (
+                 <div><div className="flex justify-between text-xs text-gray-400 mb-2"><span>Find: <b className="text-white text-lg">{focusNextNumber}</b></span></div><div className="grid grid-cols-10 gap-1">{focusGrid.map(num => <button key={num} onTouchStart={(e) => { e.preventDefault(); tapFocusNumber(num); }} onClick={() => tapFocusNumber(num)} className={`aspect-square flex items-center justify-center text-[10px] font-bold rounded ${num < focusNextNumber ? 'bg-green-900 text-green-500' : 'bg-gray-700 text-white active:bg-blue-500'}`}>{num}</button>)}</div></div>
+               )}
+            </div>
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
+               <h3 className="text-sm font-bold text-white">2. Weekly Check-In</h3>
+               
+               {/* Academic */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Grades / Academics on track?</label>
+                 <div className="flex gap-2">
+                   {['Yes', 'No'].map(opt => (
+                     <button key={opt} onClick={() => setWeeklyAcademic(opt)} 
+                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyAcademic === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
+                       {opt}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Weight */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Weight Management on track?</label>
+                 <div className="flex gap-2">
+                   {['Yes', 'No'].map(opt => (
+                     <button key={opt} onClick={() => setWeeklyWeight(opt)} 
+                       className={`flex-1 py-2 rounded text-xs font-bold border ${weeklyWeight === opt ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-600 text-gray-400'}`}>
+                       {opt}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Recovery */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-2">Recovery Level (1-10)</label>
+                 <input type="range" min="1" max="10" className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" 
+                   value={weeklyRecovery} onChange={e => setWeeklyRecovery(parseInt(e.target.value))} />
+                 <div className="text-center text-xl font-bold text-blue-400 mt-1">{weeklyRecovery}</div>
+               </div>
+
+               {/* Goal */}
+               <div>
+                 <label className="text-xs text-gray-400 block mb-1">Weekly Goal</label>
+                 <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" 
+                   placeholder="One specific thing to improve..." value={weeklyGoal} onChange={e => setWeeklyGoal(e.target.value)} />
+               </div>
+
+               <button onClick={submitWeekly} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-lg">Submit Launch</button>
+            </div>
+            </>
+            )}
+          </div>
+        )}
+
+        {/* --- TAB: MATCH DAY --- */}
+        {activeTab === 'match' && !showForum && (
+          <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
+            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
+            {matchComplete ? (
+               <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
+                <h3 className="text-2xl font-bold text-white mb-2">Match Recorded</h3>
+                <button onClick={() => setMatchComplete(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto"><Copy className="w-4 h-4"/> Log Another Match</button>
+              </div>
+            ) : (
+            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
+              <div><label className="text-xs text-gray-500 mb-1 block">Event Name</label><input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchEvent} onChange={e => setMatchEvent(e.target.value)} /></div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="text-xs text-gray-500 mb-1 block">Opponent</label><input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchOpponent} onChange={e => setMatchOpponent(e.target.value)} /></div>
+                <div><label className="text-xs text-gray-500 mb-1 block">Result</label><select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchResult} onChange={e => setMatchResult(e.target.value)}><option>Win</option><option>Loss</option></select></div>
+              </div>
+              <div className="pt-4 border-t border-gray-700"><h3 className="text-sm font-bold text-white mb-2">Win or Learn</h3><div className="mb-3"><label className="text-xs text-gray-400 block mb-1">What went well?</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Setups, motion, attitude..." value={matchWell} onChange={e => setMatchWell(e.target.value)} /></div><div><label className="text-xs text-gray-400 block mb-1">What did I learn?</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Technical fixes, mindset gaps..." value={matchLearn} onChange={e => setMatchLearn(e.target.value)} /></div></div>
+              <button onClick={submitMatch} disabled={loading} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg">Log Match</button>
+            </div>
+            )}
+          </div>
         )}
 
         {/* --- TAB 6: LIBRARY (Updated Grid Layout) --- */}
@@ -1227,16 +1342,48 @@ const App = () => {
 
       <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto z-40">
          <div className="max-w-4xl mx-auto flex justify-around w-full">
-            <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
-            <button onClick={() => setActiveTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
-            <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
-            <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
-            <button onClick={() => setActiveTab('schedule')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'schedule' ? 'text-pink-500' : 'text-gray-500'}`}><Calendar className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Schedule</span></button>
-            <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
-            <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
-            <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
+            <button onClick={() => switchTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
+            <button onClick={() => switchTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
+            <button onClick={() => switchTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
+            <button onClick={() => setShowMenu(true)} className={`flex flex-col items-center p-2 min-w-[50px] ${showMenu ? 'text-pink-500' : 'text-gray-500'}`}><Menu className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Menu</span></button>
          </div>
       </div>
+      
+      {/* --- MENU OVERLAY (Replaces old tabs for mobile) --- */}
+      {showMenu && (
+         <div className="fixed inset-0 bg-gray-900/95 z-50 flex items-center justify-center p-6 animate-in fade-in">
+            <button onClick={() => setShowMenu(false)} className="absolute top-6 right-6 text-white bg-gray-800 p-2 rounded-full"><XCircle className="w-8 h-8"/></button>
+            <div className="grid grid-cols-2 gap-4 w-full max-w-sm">
+                <h2 className="col-span-2 text-center text-xl font-bold text-white mb-4">App Menu</h2>
+                <button onClick={() => { switchTab('weekly'); setShowMenu(false); }} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col items-center justify-center gap-2 hover:bg-gray-700 active:scale-95 transition-all">
+                   <Zap className="w-8 h-8 text-yellow-500"/>
+                   <span className="font-bold text-white">Weekly Launch</span>
+                </button>
+                <button onClick={() => { switchTab('foundation'); setShowMenu(false); }} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col items-center justify-center gap-2 hover:bg-gray-700 active:scale-95 transition-all">
+                   <Target className="w-8 h-8 text-pink-500"/>
+                   <span className="font-bold text-white">My Profile</span>
+                </button>
+                <button onClick={() => { switchTab('bank'); setShowMenu(false); }} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col items-center justify-center gap-2 hover:bg-gray-700 active:scale-95 transition-all">
+                   <Trophy className="w-8 h-8 text-yellow-500"/>
+                   <span className="font-bold text-white">Confidence Bank</span>
+                </button>
+                <button onClick={() => { switchTab('schedule'); setShowMenu(false); }} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col items-center justify-center gap-2 hover:bg-gray-700 active:scale-95 transition-all">
+                   <Calendar className="w-8 h-8 text-purple-500"/>
+                   <span className="font-bold text-white">Schedule</span>
+                </button>
+                <button onClick={() => { switchTab('library'); setShowMenu(false); }} className="bg-gray-800 p-6 rounded-xl border border-gray-700 flex flex-col items-center justify-center gap-2 col-span-2 hover:bg-gray-700 active:scale-95 transition-all">
+                   <Video className="w-8 h-8 text-blue-500"/>
+                   <span className="font-bold text-white">Video Library</span>
+                </button>
+                <div className="col-span-2 mt-4 pt-4 border-t border-gray-800">
+                    <button onClick={() => { signOut(auth); setShowMenu(false); }} className="w-full bg-red-900/50 p-4 rounded-xl text-red-300 font-bold flex items-center justify-center gap-2">
+                       <LogOut className="w-4 h-4"/> Sign Out
+                    </button>
+                </div>
+            </div>
+         </div>
+      )}
+
     </div>
   );
 };
