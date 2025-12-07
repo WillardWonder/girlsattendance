@@ -32,9 +32,9 @@ const LOGO_URL = "https://raw.githubusercontent.com/WillardWonder/girlsattendanc
 
 // --- EVENTS FOR COUNTDOWN ---
 const MAJOR_EVENTS = [
-  { name: "Girls Regionals", date: new Date("2026-02-13T09:00:00") },
-  { name: "Girls Sectionals", date: new Date("2026-02-20T09:00:00") },
-  { name: "Girls State", date: new Date("2026-02-26T09:00:00") }
+  { name: "Regionals", date: new Date("2026-02-13T09:00:00") },
+  { name: "Sectionals", date: new Date("2026-02-20T09:00:00") },
+  { name: "State", date: new Date("2026-02-26T09:00:00") }
 ];
 
 // Initialize Firebase
@@ -71,8 +71,7 @@ const App = () => {
   const [resources, setResources] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<any>(null);
-  const [countdownString, setCountdownString] = useState('');
-  const [nextEventName, setNextEventName] = useState('');
+  const [countdowns, setCountdowns] = useState<any[]>([]);
 
   // --- FORUM / DISCUSSION STATE ---
   const [showForum, setShowForum] = useState(false);
@@ -166,6 +165,12 @@ const App = () => {
   const getCurrentName = () => {
     if (userProfile && userProfile.First_Name) return `${userProfile.Last_Name}, ${userProfile.First_Name}`;
     return user?.email || "Athlete";
+  };
+
+  const getFirstName = () => {
+     if (userProfile && userProfile.First_Name) return userProfile.First_Name;
+     if (user && user.email) return user.email.split('@')[0];
+     return "Athlete";
   };
 
   const getAbsentStudents = () => {
@@ -421,24 +426,23 @@ const App = () => {
   useEffect(() => {
     const updateCountdown = () => {
       const now = new Date();
-      // Find the first event that is in the future
-      const upcoming = MAJOR_EVENTS.find(e => e.date > now);
-      
-      if (upcoming) {
-        setNextEventName(upcoming.name);
-        const diff = upcoming.date.getTime() - now.getTime();
-        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-        setCountdownString(`${days}d ${hours}h ${minutes}m`);
-      } else {
-        setNextEventName("Season Complete");
-        setCountdownString("");
-      }
+      const updated = MAJOR_EVENTS.map(ev => {
+        const diff = ev.date.getTime() - now.getTime();
+        // If event passed, return 0s
+        if (diff <= 0) return { name: ev.name.replace("Girls ", ""), days: 0, hours: 0, minutes: 0, seconds: 0 };
+        return {
+          name: ev.name.replace("Girls ", ""),
+          days: Math.floor(diff / (1000 * 60 * 60 * 24)),
+          hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
+          minutes: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
+          seconds: Math.floor((diff % (1000 * 60)) / 1000)
+        };
+      });
+      setCountdowns(updated);
     };
 
     updateCountdown(); // Initial call
-    const interval = setInterval(updateCountdown, 60000); // Update every minute
+    const interval = setInterval(updateCountdown, 1000); // Update every second
     return () => clearInterval(interval);
   }, []);
 
@@ -835,17 +839,28 @@ const App = () => {
   // 4. ATHLETE DASHBOARD
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
-      <div className="bg-gray-900 p-4 border-b border-gray-800 sticky top-0 z-10 shadow-lg flex justify-between items-center">
-         <div className="flex items-center gap-2">
+      <div className="bg-gray-900 p-2 border-b border-gray-800 sticky top-0 z-10 shadow-lg">
+         <div className="flex justify-between items-center mb-2">
+           <div className="flex items-center gap-2">
              {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
-             <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getCurrentName().split(' ')[1] || 'Athlete'}!</p></div>
+             <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getFirstName()}!</p></div>
+           </div>
+           <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
          </div>
-         {/* Countdown Display */}
-         <div className="text-right">
-            <p className="text-[10px] text-gray-400 uppercase tracking-wide">Next: {nextEventName}</p>
-            <p className="text-sm font-mono font-bold text-pink-500">{countdownString}</p>
+         {/* Countdown Row */}
+         <div className="flex gap-2 justify-between bg-black/30 p-2 rounded-lg overflow-x-auto">
+            {countdowns.map((c, i) => (
+              <div key={i} className="flex flex-col items-center bg-gray-800 px-2 py-1 rounded border border-gray-700/50 min-w-[90px]">
+                 <span className="text-[8px] text-gray-500 uppercase tracking-tighter mb-0.5">{c.name}</span>
+                 <div className="flex gap-1 text-[10px] font-mono font-bold text-pink-500 leading-none">
+                    <span>{c.days}d</span>
+                    <span>{c.hours}h</span>
+                    <span>{c.minutes}m</span>
+                    <span className="text-white">{c.seconds}s</span>
+                 </div>
+              </div>
+            ))}
          </div>
-         <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
       </div>
 
       <div className="p-4 max-w-lg mx-auto">
@@ -1081,30 +1096,6 @@ const App = () => {
                 {confidenceDeposits.length === 0 ? <div className="p-8 text-center text-gray-500"><Leaf className="w-12 h-12 mx-auto mb-2 opacity-20"/><p>No deposits yet.</p></div> : <div className="divide-y divide-gray-700">{confidenceDeposits.map(d => <div key={d.id} className="p-4"><div className="text-xs text-blue-400 font-mono mb-1">{d.date}</div><div className="text-white text-sm font-medium">"{d.text}"</div></div>)}</div>}
              </div>
            </div>
-        )}
-
-        {/* --- TAB: MATCH DAY --- */}
-        {activeTab === 'match' && !showForum && (
-          <div className="space-y-6 animate-in fade-in">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2"><Swords className="w-5 h-5 text-red-500"/> Match Day Review</h2>
-            {matchComplete ? (
-               <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
-                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
-                <h3 className="text-2xl font-bold text-white mb-2">Match Recorded</h3>
-                <button onClick={() => setMatchComplete(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto"><Copy className="w-4 h-4"/> Log Another Match</button>
-              </div>
-            ) : (
-            <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
-              <div><label className="text-xs text-gray-500 mb-1 block">Event Name</label><input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchEvent} onChange={e => setMatchEvent(e.target.value)} /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-gray-500 mb-1 block">Opponent</label><input type="text" className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchOpponent} onChange={e => setMatchOpponent(e.target.value)} /></div>
-                <div><label className="text-xs text-gray-500 mb-1 block">Result</label><select className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" value={matchResult} onChange={e => setMatchResult(e.target.value)}><option>Win</option><option>Loss</option></select></div>
-              </div>
-              <div className="pt-4 border-t border-gray-700"><h3 className="text-sm font-bold text-white mb-2">Win or Learn</h3><div className="mb-3"><label className="text-xs text-gray-400 block mb-1">What went well?</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Setups, motion, attitude..." value={matchWell} onChange={e => setMatchWell(e.target.value)} /></div><div><label className="text-xs text-gray-400 block mb-1">What did I learn?</label><textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-20" placeholder="Technical fixes, mindset gaps..." value={matchLearn} onChange={e => setMatchLearn(e.target.value)} /></div></div>
-              <button onClick={submitMatch} disabled={loading} className="w-full bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-lg">Log Match</button>
-            </div>
-            )}
-          </div>
         )}
 
         {/* --- TAB 6: LIBRARY (Updated Grid Layout) --- */}
