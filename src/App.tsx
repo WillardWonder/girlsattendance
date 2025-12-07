@@ -62,6 +62,7 @@ const App = () => {
   
   // App State
   const [activeTab, setActiveTab] = useState('daily');
+  const [showMenu, setShowMenu] = useState(false);
   const [appMode, setAppMode] = useState<'athlete' | 'coach'>('athlete');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -625,6 +626,7 @@ const App = () => {
     const data = { identity: identityWords, whys: whyLevels, purpose: purposeStatement, updated: new Date().toISOString() };
     await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
     setUserProfile({ ...userProfile, ...data }); setSuccessMsg("Foundation Saved."); setFoundationLocked(true);
+    setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
     
     // BUILD BANK: Add a positive log entry for completing the profile
     try {
@@ -637,8 +639,6 @@ const App = () => {
         });
         loadConfidenceBank(user.uid); // Refresh bank immediately
     } catch(e) { console.error("Bank build error", e); }
-
-    setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
   const unlockCoach = (e: React.FormEvent) => { 
