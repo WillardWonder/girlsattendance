@@ -8,7 +8,7 @@ import {
   CloudLightning, Video, Youtube, Megaphone, ExternalLink, ShieldAlert, 
   BookOpen, Battery, Smile, Zap, Target, Play, RotateCcw, LogOut, Mail,
   Dumbbell, Heart, DollarSign, GraduationCap, PartyPopper, Flame, Brain, Trophy, Leaf, Droplets, Swords, Lightbulb, Edit3, Users, Search, Scale, UserCheck, UserX, LayoutDashboard, Plus,
-  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer, Menu, Grid, HelpCircle
+  XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer, Menu, Grid, HelpCircle, Info
 } from 'lucide-react';
 
 // --- CONFIGURATION ---
@@ -170,8 +170,22 @@ const App = () => {
 
   const getFirstName = () => {
      if (userProfile && userProfile.First_Name) return userProfile.First_Name;
-     if (user && user.email) return user.email.split('@')[0];
+     if (user && user.email) {
+        const namePart = user.email.split('@')[0];
+        // Capitalize first letter
+        return namePart.charAt(0).toUpperCase() + namePart.slice(1);
+     }
      return "Athlete";
+  };
+
+  // --- PROFILE VALIDATION ---
+  const isProfileComplete = () => {
+      // Check if identity words are filled (at least the first one)
+      // Check if userProfile exists (even if empty, it implies loaded)
+      // Check if 'whys' are filled (at least first one)
+      if (!identityWords || !identityWords[0] || identityWords[0].trim() === '') return false;
+      if (!whyLevels || !whyLevels[0] || whyLevels[0].trim() === '') return false;
+      return true;
   };
 
   const getAbsentStudents = () => {
@@ -416,15 +430,19 @@ const App = () => {
         if (docSnap.exists()) {
             const data = docSnap.data();
             setUserProfile(data);
-            // Sync local state
+            // Sync local state safely
             if(data.identity) setIdentityWords(data.identity);
+            else setIdentityWords(['','','','','']);
+            
             if(data.whys) setWhyLevels(data.whys);
-            if(data.purpose) setPurposeStatement(data.purpose);
+            else setWhyLevels(['','','']);
+            
+            if(data.purpose) setPurposeStatement(data.purpose || '');
 
             // Redirect Logic: If profile is new/empty, force them to Foundation tab
             if (!data.identity || data.identity[0] === '' || data.identity.length === 0) {
                  setFoundationLocked(false);
-                 setActiveTab(prev => (prev === 'daily' ? 'foundation' : prev));
+                 setActiveTab('foundation'); // Force profile tab for new users
             } else {
                  setFoundationLocked(true);
             }
@@ -566,6 +584,13 @@ const App = () => {
   };
 
   const submitDaily = async () => {
+    // GATE: Profile Check
+    if (!isProfileComplete()) {
+       alert("Please complete your Profile (Foundation) first to define your 'Why'.");
+       switchTab('foundation');
+       return;
+    }
+
     if (!weight || !energyColor) { alert("Please enter Weight and Energy."); return; }
     setLoading(true);
     const commonData = {
@@ -597,6 +622,13 @@ const App = () => {
   };
 
   const submitMatch = async () => {
+    // GATE: Profile Check
+    if (!isProfileComplete()) {
+       alert("Please complete your Profile (Foundation) first.");
+       switchTab('foundation');
+       return;
+    }
+
     if (!matchEvent || !matchOpponent) { alert("Please fill match details."); return; }
     setLoading(true);
     const data = {
@@ -610,6 +642,13 @@ const App = () => {
   };
 
   const submitWeekly = async () => {
+    // GATE: Profile Check
+    if (!isProfileComplete()) {
+       alert("Please complete your Profile (Foundation) first.");
+       switchTab('foundation');
+       return;
+    }
+
     setLoading(true);
     const data = {
       uid: user.uid, name: getCurrentName(), type: 'weekly_prep', timestamp: new Date().toISOString(),
@@ -626,7 +665,6 @@ const App = () => {
     const data = { identity: identityWords, whys: whyLevels, purpose: purposeStatement, updated: new Date().toISOString() };
     await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
     setUserProfile({ ...userProfile, ...data }); setSuccessMsg("Foundation Saved."); setFoundationLocked(true);
-    setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
     
     // BUILD BANK: Add a positive log entry for completing the profile
     try {
@@ -639,6 +677,8 @@ const App = () => {
         });
         loadConfidenceBank(user.uid); // Refresh bank immediately
     } catch(e) { console.error("Bank build error", e); }
+
+    setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
   const unlockCoach = (e: React.FormEvent) => { 
@@ -1076,7 +1116,7 @@ const App = () => {
              <div className="bg-gradient-to-br from-gray-800 to-gray-900 p-5 rounded-2xl border border-gray-700 shadow-lg">
                 <div className="flex justify-between items-start mb-4">
                    <div>
-                      <h3 className="text-lg font-bold text-white">{userProfile?.First_Name} {userProfile?.Last_Name}</h3>
+                      <h3 className="text-lg font-bold text-white">{getFirstName()} {userProfile?.Last_Name || ''}</h3>
                       <p className="text-xs text-gray-400">Class of 20{userProfile?.Grade ? 32 - (userProfile.Grade - 5) : '??'}</p>
                    </div>
                    <div className="bg-pink-900/30 p-2 rounded-lg">
@@ -1085,16 +1125,16 @@ const App = () => {
                 </div>
                 <div className="grid grid-cols-3 gap-4 text-center">
                    <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
-                      <div className="text-2xl font-bold text-white">{studentHistory.length}</div>
+                      <div className="text-2xl font-bold text-white">{studentHistory?.length || 0}</div>
                       <div className="text-[10px] text-gray-400 uppercase tracking-wider">Check-ins</div>
                    </div>
                    <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
-                      <div className="text-2xl font-bold text-blue-400">{confidenceDeposits.filter(d => d.type === 'win').length}</div>
+                      <div className="text-2xl font-bold text-blue-400">{confidenceDeposits?.filter(d => d.type === 'win').length || 0}</div>
                       <div className="text-[10px] text-gray-400 uppercase tracking-wider">Wins Logged</div>
                    </div>
                    <div className="bg-gray-800/50 p-2 rounded-lg border border-gray-700">
                       <div className="text-2xl font-bold text-green-400">
-                         {studentHistory.length > 0 ? Math.round(studentHistory.reduce((acc, curr) => acc + (curr.sleep?.hours ? parseFloat(curr.sleep.hours) : 0), 0) / studentHistory.length) : '-'}
+                         {(studentHistory && studentHistory.length > 0) ? Math.round(studentHistory.reduce((acc, curr) => acc + (curr.sleep?.hours ? parseFloat(curr.sleep.hours) : 0), 0) / studentHistory.length) : '-'}
                       </div>
                       <div className="text-[10px] text-gray-400 uppercase tracking-wider">Avg Sleep</div>
                    </div>
@@ -1103,14 +1143,29 @@ const App = () => {
 
              {/* Identity Section */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><UserCheck className="w-4 h-4"/> 1. My Identity</h3>
+               <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><UserCheck className="w-4 h-4"/> 1. My Identity</h3>
+                  <button className="text-[10px] text-blue-400 underline flex items-center gap-1"><HelpCircle className="w-3 h-3"/> Need ideas?</button>
+               </div>
+               <div className="text-[10px] text-gray-500 mb-2 p-2 bg-gray-900/50 rounded border border-gray-700 hidden group-hover:block">
+                  Pick 5 words that define who you strive to be on your best day. 
+                  <br/><span className="text-pink-500 font-bold">Examples: Relentless, Grateful, Disciplined, Fearless, Leader</span>
+               </div>
                <p className="text-[10px] text-gray-500 mb-2">I am...</p>
                <div className="space-y-2">{identityWords.map((word, i) => <div key={i} className="flex gap-2 items-center"><span className="text-gray-600 text-xs font-mono">{i+1}.</span><input type="text" disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={word} onChange={e => { const n = [...identityWords]; n[i] = e.target.value; setIdentityWords(n); }} /></div>)}</div>
              </div>
 
              {/* The 3 Whys Section */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
-               <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><HelpCircle className="w-4 h-4"/> 2. The 3 Whys</h3>
+               <div className="flex justify-between items-center mb-3">
+                  <h3 className="text-xs font-bold text-gray-400 uppercase flex items-center gap-2"><HelpCircle className="w-4 h-4"/> 2. The 3 Whys</h3>
+                  <div className="relative group">
+                      <Info className="w-4 h-4 text-gray-500 cursor-pointer"/>
+                      <div className="absolute right-0 w-48 bg-gray-900 border border-gray-600 p-2 rounded text-[10px] text-gray-300 hidden group-hover:block z-10">
+                          Dig deeper. Move from "I want to win" (Surface) to "Because I promised myself" (Core).
+                      </div>
+                  </div>
+               </div>
                <div className="space-y-4">
                   <div>
                      <label className="text-[10px] text-blue-400 uppercase font-bold block mb-1">Level 1: Surface (Why wrestle?)</label>
@@ -1130,7 +1185,8 @@ const App = () => {
              {/* Purpose Statement */}
              <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><Target className="w-4 h-4"/> 3. Purpose Statement</h3>
-               <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-24 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} placeholder="I wrestle to..." />
+               <p className="text-[10px] text-gray-500 mb-2">Your personal mission statement.</p>
+               <textarea disabled={foundationLocked} className={`w-full bg-gray-900 border rounded p-2 text-white text-sm h-24 ${foundationLocked ? 'border-transparent' : 'border-gray-600'}`} value={purposeStatement} onChange={e => setPurposeStatement(e.target.value)} placeholder="I wrestle to build unshakeable confidence that I will carry for the rest of my life." />
              </div>
 
              {!foundationLocked && <button onClick={saveFoundation} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-3 rounded-lg">Save Foundation</button>}
