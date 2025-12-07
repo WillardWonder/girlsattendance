@@ -11,7 +11,7 @@ import {
   XCircle, AlertTriangle, UploadCloud, MessageCircle, Send, Filter, Hash, Star, Timer, Menu, Grid, HelpCircle, Info
 } from 'lucide-react';
 
-// --- CONFIGURATION ---
+// --- CONFIGURATION (RESTORED YOUR ORIGINAL CONFIG) ---
 const firebaseConfig = {
   apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
   authDomain: "girls-wrestling-attendance.firebaseapp.com",
@@ -414,8 +414,8 @@ const App = () => {
       if (currentUser) {
         // Auto-detect coach by email
         if(currentUser.email && APPROVED_COACH_EMAILS.includes(currentUser.email)) {
-             setAppMode('coach');
-             setIsCoachAuthenticated(true);
+              setAppMode('coach');
+              setIsCoachAuthenticated(true);
         }
       } else {
         setUserProfile(null);
@@ -817,12 +817,12 @@ const App = () => {
                       <div className="text-sm text-gray-400 italic">"{r.focusStatement}"</div>
                     </div>
                     <div className="text-right">
-                       <div className="text-xs text-gray-500 mb-1">{r.time}</div>
-                       <div className="font-bold text-pink-500 uppercase text-xs">{r.focusWord}</div>
-                       <div className="flex items-center justify-end gap-2 mt-2">
+                        <div className="text-xs text-gray-500 mb-1">{r.time}</div>
+                        <div className="font-bold text-pink-500 uppercase text-xs">{r.focusWord}</div>
+                        <div className="flex items-center justify-end gap-2 mt-2">
                           {!r.skinCheckPass && <AlertCircle className="w-4 h-4 text-red-500" />}
                           <button onClick={() => handleDeleteCheckIn(r.id, r.name)}><XCircle className="w-5 h-5 text-gray-600 hover:text-red-500"/></button>
-                       </div>
+                        </div>
                     </div>
                   </div>
                 ))}
@@ -858,8 +858,8 @@ const App = () => {
                   {historyStats.map((stat, idx) => (
                     <div key={idx} className="flex flex-col border-b border-gray-700/50 last:border-0">
                       <button onClick={() => setExpandedDate(expandedDate === stat.date ? null : stat.date)} className="p-4 flex justify-between items-center w-full hover:bg-gray-700/50">
-                         <div className="flex items-center gap-3"><Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span></div>
-                         <div className="flex items-center gap-2"><span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>{expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
+                          <div className="flex items-center gap-3"><Calendar className="w-5 h-5 text-gray-500" /><span className="font-bold text-gray-200">{stat.date}</span></div>
+                          <div className="flex items-center gap-2"><span className="bg-gray-800 px-3 py-1 rounded text-white font-bold">{stat.count}</span>{expandedDate === stat.date ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}</div>
                       </button>
                       {expandedDate === stat.date && (
                         <div className="bg-gray-900/50 p-4 border-t border-gray-700">
@@ -1024,6 +1024,49 @@ const App = () => {
             <button onClick={submitDaily} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Daily Log</button>
             </>
             )}
+          </div>
+        )}
+
+        {/* --- TAB: WEEKLY (RESTORED MISSING VIEW) --- */}
+        {activeTab === 'weekly' && (
+          <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
+             <h2 className="text-xl font-bold text-white flex items-center gap-2"><Zap className="w-5 h-5 text-yellow-500"/> Weekly Launch</h2>
+             {weeklyComplete ? (
+              <div className="bg-gray-800 p-8 rounded-xl border border-green-500/50 text-center animate-in zoom-in">
+                <div className="mx-auto bg-green-500/20 w-20 h-20 rounded-full flex items-center justify-center mb-4"><CheckCircle className="w-10 h-10 text-green-400" /></div>
+                <h3 className="text-2xl font-bold text-white mb-2">Ready for the Week!</h3>
+                <button onClick={() => setWeeklyComplete(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto">Edit Entry</button>
+              </div>
+             ) : (
+             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700 space-y-4">
+                <div>
+                  <label className="text-xs text-gray-500 mb-2 block">Academics in check?</label>
+                  <div className="flex gap-2">
+                    <button onClick={() => setWeeklyAcademic('Yes')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${weeklyAcademic === 'Yes' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>Yes</button>
+                    <button onClick={() => setWeeklyAcademic('No')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${weeklyAcademic === 'No' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>No</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-2 block">Weight on track?</label>
+                  <div className="flex gap-2">
+                    <button onClick={() => setWeeklyWeight('Yes')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${weeklyWeight === 'Yes' ? 'bg-green-900/50 border-green-500 text-green-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>Yes</button>
+                    <button onClick={() => setWeeklyWeight('No')} className={`flex-1 py-3 rounded-lg border-2 text-xs font-bold ${weeklyWeight === 'No' ? 'bg-red-900/50 border-red-500 text-red-400' : 'bg-gray-900 border-gray-700 text-gray-500'}`}>No</button>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-2 block">Recovery Level (1-10)</label>
+                  <div className="flex items-center gap-4">
+                    <input type="range" min="1" max="10" value={weeklyRecovery} onChange={(e) => setWeeklyRecovery(parseInt(e.target.value))} className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer" />
+                    <span className="text-xl font-bold text-blue-400">{weeklyRecovery}</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Goal for this week</label>
+                  <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white h-24" placeholder="One specific thing to improve..." value={weeklyGoal} onChange={e => setWeeklyGoal(e.target.value)} />
+                </div>
+                <button onClick={submitWeekly} disabled={loading} className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Weekly Prep</button>
+             </div>
+             )}
           </div>
         )}
 
