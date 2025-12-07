@@ -619,19 +619,6 @@ const App = () => {
     const data = { identity: identityWords, whys: whyLevels, purpose: purposeStatement, updated: new Date().toISOString() };
     await setDoc(doc(db, "user_profiles", user.uid), data, { merge: true });
     setUserProfile({ ...userProfile, ...data }); setSuccessMsg("Foundation Saved."); setFoundationLocked(true);
-    
-    // BUILD BANK: Add a positive log entry for completing the profile
-    try {
-        await addDoc(collection(db, "daily_logs"), {
-            uid: user.uid, 
-            date: new Date().toLocaleDateString(),
-            timestamp: new Date().toISOString(),
-            type: 'foundation_log',
-            mentalImprovement: "Defined my Core Values, Whys, and Purpose."
-        });
-        loadConfidenceBank(user.uid); // Refresh bank immediately
-    } catch(e) { console.error("Bank build error", e); }
-
     setTimeout(() => setSuccessMsg(''), 3000); setLoading(false);
   };
 
@@ -750,7 +737,7 @@ const App = () => {
         </div>
         {/* LIVE TAB */}
         {adminTab === 'live' && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-4xl mx-auto">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
               <div className="text-gray-400 text-xs uppercase font-bold">Present Today</div>
               <div className="text-3xl font-bold text-green-400">{todaysAttendance.length}</div>
@@ -791,7 +778,7 @@ const App = () => {
         )}
         {/* HISTORY TAB */}
         {adminTab === 'history' && (
-          <div className="space-y-4">
+          <div className="space-y-4 max-w-4xl mx-auto">
              <div className="bg-blue-900/20 border border-blue-800 p-4 rounded-lg">
                 <div className="flex items-center gap-2 mb-4"><BarChart3 className="w-5 h-5 text-blue-400" /><h4 className="text-blue-300 font-bold">Report Builder</h4></div>
                 <div className="grid grid-cols-2 gap-3 mb-4">
@@ -823,7 +810,7 @@ const App = () => {
         )}
         {/* CONTENT TAB */}
         {adminTab === 'content' && (
-          <div className="space-y-6">
+          <div className="space-y-6 max-w-4xl mx-auto">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
               <h3 className="font-bold flex items-center gap-2 mb-3"><Megaphone className="w-4 h-4 text-yellow-400"/> Announcement</h3>
               <textarea className="w-full bg-gray-900 border border-gray-600 rounded p-2 text-sm text-white mb-2" placeholder="Message..." value={newAnnouncement} onChange={e => setNewAnnouncement(e.target.value)} />
@@ -857,7 +844,7 @@ const App = () => {
         )}
         {/* ROSTER TAB */}
         {adminTab === 'roster' && (
-          <div className="space-y-6">
+          <div className="space-y-6 max-w-4xl mx-auto">
              <div className="bg-red-900/10 border border-red-900/50 p-4 rounded-lg">
                 <h4 className="text-red-400 font-bold mb-2 flex items-center gap-2"><AlertTriangle className="w-4 h-4"/> Danger Zone</h4>
                 <button onClick={handleDeleteAllRoster} className="w-full bg-red-900/50 hover:bg-red-900/80 text-white border border-red-800 text-sm py-2 rounded-lg font-bold flex items-center justify-center gap-2"><Trash2 className="w-4 h-4"/> Delete Entire Roster</button>
@@ -881,34 +868,36 @@ const App = () => {
   // 4. ATHLETE DASHBOARD
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 font-sans pb-24">
-      <div className="bg-gray-900 p-2 border-b border-gray-800 sticky top-0 z-10 shadow-lg">
-         <div className="flex justify-between items-center mb-2">
-           <div className="flex items-center gap-2">
-             {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
-             <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getFirstName()}!</p></div>
+      <div className="bg-gray-900 border-b border-gray-800 sticky top-0 z-10 shadow-lg">
+         <div className="max-w-4xl mx-auto p-2">
+           <div className="flex justify-between items-center mb-2">
+             <div className="flex items-center gap-2">
+               {LOGO_URL && <img src={LOGO_URL} className="w-8 h-8 object-contain" alt="Logo"/>}
+               <div><h1 className="text-lg font-extrabold text-white">Smart Journal</h1><p className="text-xs text-pink-400">Welcome, {getFirstName()}!</p></div>
+             </div>
+             <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
            </div>
-           <button onClick={() => { signOut(auth); }} className="bg-gray-800 p-2 rounded-full hover:bg-gray-700 ml-4"><LogOut className="w-4 h-4 text-gray-400"/></button>
-         </div>
-         {/* Countdown Row */}
-         <div className="flex gap-2 justify-between bg-black/30 p-2 rounded-lg overflow-x-auto">
-            {countdowns.map((c, i) => (
-              <div key={i} className="flex flex-col items-center bg-gray-800 px-2 py-1 rounded border border-gray-700/50 min-w-[90px]">
-                 <span className="text-[8px] text-gray-500 uppercase tracking-tighter mb-0.5">{c.name}</span>
-                 <div className="flex gap-1 text-[10px] font-mono font-bold text-pink-500 leading-none">
-                    <span>{c.days}d</span>
-                    <span>{c.hours}h</span>
-                    <span>{c.minutes}m</span>
-                    <span className="text-white">{c.seconds}s</span>
-                 </div>
-              </div>
-            ))}
+           {/* Countdown Row */}
+           <div className="flex gap-2 justify-between bg-black/30 p-2 rounded-lg overflow-x-auto">
+              {countdowns.map((c, i) => (
+                <div key={i} className="flex flex-col items-center bg-gray-800 px-2 py-1 rounded border border-gray-700/50 min-w-[90px]">
+                   <span className="text-[8px] text-gray-500 uppercase tracking-tighter mb-0.5">{c.name}</span>
+                   <div className="flex gap-1 text-[10px] font-mono font-bold text-pink-500 leading-none">
+                      <span>{c.days}d</span>
+                      <span>{c.hours}h</span>
+                      <span>{c.minutes}m</span>
+                      <span className="text-white">{c.seconds}s</span>
+                   </div>
+                </div>
+              ))}
+           </div>
          </div>
       </div>
 
-      <div className="p-4 max-w-lg mx-auto">
+      <div className="p-4 max-w-4xl mx-auto w-full">
         {/* --- TAB 1: DAILY GRIND --- */}
         {activeTab === 'daily' && !showForum && (
-          <div className="space-y-6 animate-in fade-in">
+          <div className="space-y-6 animate-in fade-in max-w-xl mx-auto">
             {/* Show Announcement if exists */}
             {announcements.length > 0 && (
               <div className="bg-gradient-to-r from-pink-900/50 to-purple-900/50 p-4 rounded-xl border border-pink-500/30 mb-4">
@@ -930,7 +919,7 @@ const App = () => {
                 <button onClick={() => setDailyComplete(false)} className="bg-gray-700 hover:bg-gray-600 text-white font-bold py-3 px-6 rounded-lg flex items-center justify-center gap-2 mx-auto"><Edit3 className="w-4 h-4"/> Edit / New Entry</button>
               </div>
             ) : (
-            <>
+            <div className="max-w-lg mx-auto space-y-6">
             <div className="bg-gray-800 p-4 rounded-xl border border-gray-700">
                <h3 className="text-xs font-bold text-gray-400 uppercase mb-4">1. Pre-Practice Check</h3>
                <div className="grid grid-cols-2 gap-4 mb-4">
@@ -969,7 +958,7 @@ const App = () => {
                </div>
             </div>
             <button onClick={submitDaily} disabled={loading} className="w-full bg-pink-600 hover:bg-pink-500 text-white font-bold py-4 rounded-xl shadow-lg">Submit Daily Log</button>
-            </>
+            </div>
             )}
           </div>
         )}
@@ -1022,7 +1011,7 @@ const App = () => {
                    </div>
 
                    {/* Input Area */}
-                   <div className="p-3 border-t border-gray-700 bg-gray-900 rounded-b-xl flex gap-2">
+                   <div className="p-3 border-t border-gray-700 bg-gray-900 rounded-b-xl flex gap-2 max-w-5xl mx-auto left-0 right-0">
                       <input 
                         type="text" 
                         className="flex-1 bg-gray-800 border border-gray-600 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
@@ -1236,15 +1225,17 @@ const App = () => {
 
       </div>
 
-      <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto">
-         <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
-         <button onClick={() => setActiveTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
-         <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
-         <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
-         <button onClick={() => setActiveTab('schedule')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'schedule' ? 'text-pink-500' : 'text-gray-500'}`}><Calendar className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Schedule</span></button>
-         <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
-         <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
-         <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
+      <div className="fixed bottom-0 w-full bg-gray-900 border-t border-gray-800 pb-safe pt-2 px-1 flex justify-around items-center z-40 overflow-x-auto z-40">
+         <div className="max-w-4xl mx-auto flex justify-around w-full">
+            <button onClick={() => setActiveTab('daily')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'daily' ? 'text-pink-500' : 'text-gray-500'}`}><Flame className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Daily</span></button>
+            <button onClick={() => setActiveTab('teamtalk')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'teamtalk' ? 'text-pink-500' : 'text-gray-500'}`}><MessageCircle className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Team Talk</span></button>
+            <button onClick={() => setActiveTab('weekly')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'weekly' ? 'text-pink-500' : 'text-gray-500'}`}><Zap className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Weekly</span></button>
+            <button onClick={() => setActiveTab('bank')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'bank' ? 'text-pink-500' : 'text-gray-500'}`}><Trophy className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Bank</span></button>
+            <button onClick={() => setActiveTab('schedule')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'schedule' ? 'text-pink-500' : 'text-gray-500'}`}><Calendar className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Schedule</span></button>
+            <button onClick={() => setActiveTab('foundation')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'foundation' ? 'text-pink-500' : 'text-gray-500'}`}><Target className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Profile</span></button>
+            <button onClick={() => setActiveTab('match')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'match' ? 'text-pink-500' : 'text-gray-500'}`}><Swords className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Match</span></button>
+            <button onClick={() => setActiveTab('library')} className={`flex flex-col items-center p-2 min-w-[50px] ${activeTab === 'library' ? 'text-pink-500' : 'text-gray-500'}`}><Video className="w-5 h-5"/><span className="text-[9px] mt-1 font-bold">Library</span></button>
+         </div>
       </div>
     </div>
   );
