@@ -252,51 +252,57 @@ const App = () => {
 
   const loadConfidenceBank = async (uid: string) => {
     try {
-      // 1. Daily Logs (Improvement & Gratitude)
-      const q1 = query(collection(db, "daily_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
+      // 1. Daily Logs (Improvement & Gratitude) - CLIENT SORTED to avoid index error
+      const q1 = query(collection(db, "daily_logs"), where("uid", "==", uid), limit(50));
       const snap1 = await getDocs(q1);
       const dailyDeposits: any[] = [];
       snap1.docs.forEach(d => {
          const data = d.data();
          if(data.mentalImprovement) {
-            dailyDeposits.push({ id: d.id + '_imp', date: data.date, text: `Improvement: ${data.mentalImprovement}`, type: 'improvement' });
+            dailyDeposits.push({ id: d.id + '_imp', date: data.date, timestamp: data.timestamp, text: `Improvement: ${data.mentalImprovement}`, type: 'improvement' });
          }
          if(data.gratitude) {
-            dailyDeposits.push({ id: d.id + '_grat', date: data.date, text: `Gratitude: ${data.gratitude}`, type: 'gratitude' });
+            dailyDeposits.push({ id: d.id + '_grat', date: data.date, timestamp: data.timestamp, text: `Gratitude: ${data.gratitude}`, type: 'gratitude' });
          }
-         // Capture Profile/Foundation logs
          if(data.type === 'foundation_log') {
-             dailyDeposits.push({ id: d.id + '_fnd', date: data.date, text: `Foundation: ${data.mentalImprovement}`, type: 'foundation' });
+             dailyDeposits.push({ id: d.id + '_fnd', date: data.date, timestamp: data.timestamp, text: `Foundation: ${data.mentalImprovement}`, type: 'foundation' });
          }
       });
 
-      // 2. Match Logs (Wins & Reflections)
-      const q2 = query(collection(db, "match_logs"), where("uid", "==", uid), orderBy("timestamp", "desc"), limit(20));
+      // 2. Match Logs (Wins & Reflections) - CLIENT SORTED
+      const q2 = query(collection(db, "match_logs"), where("uid", "==", uid), limit(50));
       const snap2 = await getDocs(q2);
       const matchDeposits: any[] = [];
       snap2.docs.forEach(d => {
          const data = d.data();
          if(data.result === 'Win') {
-             matchDeposits.push({ id: d.id + '_win', date: data.date, text: `WIN vs ${data.opponent}`, type: 'win' });
+             matchDeposits.push({ id: d.id + '_win', date: data.date, timestamp: data.timestamp, text: `WIN vs ${data.opponent}`, type: 'win' });
          }
          if(data.reflection?.well) {
-             matchDeposits.push({ id: d.id + '_well', date: data.date, text: `Match Highlight: ${data.reflection.well}`, type: 'match_well' });
+             matchDeposits.push({ id: d.id + '_well', date: data.date, timestamp: data.timestamp, text: `Match Highlight: ${data.reflection.well}`, type: 'match_well' });
          }
       });
 
-      const allDeposits = [...dailyDeposits, ...matchDeposits].sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      // Combine and Sort Client-Side (Fixes Index Error)
+      const allDeposits = [...dailyDeposits, ...matchDeposits].sort((a,b) => {
+          return new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime();
+      });
+
       setConfidenceDeposits(allDeposits);
     } catch (e: any) { 
-      if (e.code === 'failed-precondition') console.warn("INDEX NEEDED: Check console for link");
       console.log("Bank load issue", e); 
     }
   };
 
   const loadStudentStats = async (uid: string) => {
     try {
-      const q = query(collection(db, "attendance"), where("studentId", "==", uid), orderBy("timestamp", "desc"), limit(20));
+      // Client-Side Sort/Filter to avoid Index Error
+      const q = query(collection(db, "attendance"), where("studentId", "==", uid), limit(100));
       const snap = await getDocs(q);
-      setStudentHistory(snap.docs.map(d => d.data()));
+      const history = snap.docs.map(d => d.data());
+      // Sort
+      history.sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setStudentHistory(history);
     } catch (e) { console.log("Stats load issue", e); }
   };
 
