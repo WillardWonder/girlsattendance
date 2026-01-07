@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wrestling Practice Timer & Stations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0d111c; 
+            color: white; 
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #3b82f6; border-radius: 10px; }
+        .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+        /* Print Specific Styles */
+        @media print {
+            .no-print { display: none !important; }
+            body { background-color: white !important; color: black !important; }
+            #print-area { display: block !important; padding: 20px; }
+            .print-card { 
+                border: 1px solid #ddd; 
+                margin-bottom: 10px; 
+                padding: 10px; 
+                page-break-inside: avoid; 
+                color: black !important;
+            }
+            .print-header { border-bottom: 3px solid black; margin-bottom: 20px; padding-bottom: 10px; }
+            .print-station-grid { 
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                gap: 10px; 
+                margin-top: 10px; 
+            }
+            .print-station-box { border: 1px solid #aaa; padding: 8px; font-size: 12px; }
+        }
+        
+        #print-area { display: none; }
+    </style>
+</head>
+<body>
+
+    <div id="app" class="min-h-screen flex flex-col no-print"></div>
+    <div id="print-area"></div>
+
+    <!-- Message Box -->
+    <div id="message-box" class="fixed top-4 right-4 z-[100] transition-transform duration-300 transform translate-x-full no-print"></div>
+
+    <script>
+        // --- Library Data ---
+        const presetActivities = [
+            // NEUTRAL
+            { id: 'n1', title: 'Duck Walk', duration: 5, category: 'Neutral' },
+            { id: 'n2', title: 'Penetration Drills', duration: 10, description: 'Double or High Crotch', category: 'Neutral' },
+            { id: 'n3', title: 'Stagger Stance/Motion', duration: 5, description: 'Head, elbow, feet', category: 'Neutral' },
+            { id: 'n4', title: 'Snap Down / Head Draw', duration: 5, category: 'Neutral' },
+            { id: 'n5', title: 'Single Leg Treetops', duration: 5, category: 'Neutral' },
+            { id: 'n6', title: 'Single Leg Run Pipes', duration: 5, category: 'Neutral' },
+            { id: 'n7', title: 'Post-n-Run', duration: 5, description: 'Creating angles from mat', category: 'Neutral' },
+            { id: 'n8', title: 'High Crotch (Variations)', duration: 10, description: 'Elbow tie, underhooks, inside/outside', category: 'Neutral' },
+            { id: 'n9', title: 'Double Leg (Lifts/Chops)', duration: 10, description: 'Kneechop, lift, turks, get to corner', category: 'Neutral' },
+            { id: 'n10', title: 'Firemans / Dump / Tip', duration: 5, category: 'Neutral' },
+            { id: 'n11', title: 'Throws', duration: 10, description: 'Head & arm, Hip toss, Back step', category: 'Neutral' },
+            { id: 'n12', title: 'Randy Lewis Elbow Block', duration: 5, category: 'Neutral' },
+            { id: 'n13', title: 'Situation Drills (Live)', duration: 15, description: 'In on a double/single', category: 'Neutral' },
+            { id: 'n14', title: 'IRONMAN', duration: 8, description: 'Neutral intensity', category: 'Neutral' },
+
+            // TOP
+            { id: 't1', title: 'Spiral Ride', duration: 5, description: 'Halfs, bar arms, hooks', category: 'Top' },
+            { id: 't2', title: 'Leg Riding', duration: 10, description: 'Extend opponent', category: 'Top' },
+            { id: 't3', title: 'Reinhardt / Crab Ride', duration: 5, category: 'Top' },
+            { id: 't4', title: 'Ankle Breakdowns', duration: 5, category: 'Top' },
+            { id: 't5', title: 'Cradles', duration: 10, description: 'Near, far, cross cradle', category: 'Top' },
+            { id: 't6', title: 'Half Nelson / Power Half', duration: 5, category: 'Top' },
+            { id: 't7', title: 'Bar Arm / Pete Bar', duration: 5, category: 'Top' },
+            { id: 't8', title: 'Coffee Grinder / Guillotine', duration: 5, category: 'Top' },
+            { id: 't9', title: 'Bundle', duration: 5, category: 'Top' },
+
+            // BOTTOM
+            { id: 'b1', title: 'Build Base', duration: 5, description: 'Thumbs up, elbows in, head up', category: 'Bottom' },
+            { id: 'b2', title: 'Stand Ups', duration: 5, description: 'Switches, 1/4 turns', category: 'Bottom' },
+            { id: 'b3', title: 'Sit Out / Popcorn', duration: 5, category: 'Bottom' },
+            { id: 'b4', title: 'Hip Heist', duration: 5, category: 'Bottom' },
+            { id: 'b5', title: 'Switch', duration: 5, description: 'Standing, lift-switch', category: 'Bottom' },
+            { id: 'b6', title: 'Rolls', duration: 5, description: 'Granby, Peterson, Near/Far side', category: 'Bottom' },
+
+            // CONDITIONING
+            { id: 'c1', title: 'Sprints', duration: 20, category: 'Conditioning' },
+            { id: 'c2', title: 'Ropes / Chair Dips', duration: 10, category: 'Conditioning' },
+            { id: 'c3', title: 'Run & Lift', duration: 15, description: 'Work till they drop', category: 'Conditioning' },
+            { id: 'c4', title: 'Games', duration: 10, category: 'Conditioning' },
+
+            // COOL DOWN
+            { id: 'cd1', title: 'Partner Static Stretching', duration: 5, description: 'Post-match recovery', category: 'Cool Down' },
+            { id: 'cd2', title: 'Dynamic Mobility Flow', duration: 5, description: 'Hip and shoulder openers', category: 'Cool Down' },
+            { id: 'cd3', title: 'Shadow Wrestling (Light)', duration: 3, description: 'Perfect form, low intensity', category: 'Cool Down' },
+            { id: 'cd4', title: 'Foam Rolling / SMR', duration: 5, description: 'Focus on legs and back', category: 'Cool Down' },
+            { id: 'cd5', title: 'Mental Review / Breathing', duration: 2, description: 'Recovery focus', category: 'Cool Down' },
+
+            // SPECIALS
+            { id: 's1', title: 'Jonny Jones', duration: 5, category: 'Specials' },
+            { id: 's2', title: 'Talvi – 1/4', duration: 5, category: 'Specials' },
+            { id: 's3', title: 'Vania – Post', duration: 5, category: 'Specials' }
+        ];
+
+        // --- State Management ---
+        let state = {
+            mode: 'setup', 
+            setupStep: 'details', 
+            practiceDate: '',
+            startTime: '15:30',
+            endTime: '17:00',
+            activities: [], 
+            customActivities: [], 
+            selectedPresets: {}, 
+            options: { enableWhistle: true, enableVoice: true, autoRestSeconds: 0 },
+            currentActivityIndex: 0,
+            isRunning: false,
+            elapsedSeconds: 0,
+            intervalId: null,
+            currentTime: '',
+            editingId: null,
+            showCustomForm: false,
+            stationEditId: null,
+            showSplitSelector: false
+        };
+
+        const STORAGE_KEY = 'wrestling-system-v5';
+
+        // --- Utilities ---
+        function playWhistle() {
+            if (!state.options.enableWhistle) return;
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain); gain.connect(ctx.destination);
+                osc.type = 'square'; osc.frequency.setValueAtTime(900, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1300, ctx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
+                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
+                osc.start(); osc.stop(ctx.currentTime + 0.4);
+            } catch (e) {}
+        }
+
+        function speak(text) {
+            if (!state.options.enableVoice) return;
+            window.speechSynthesis.cancel();
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.rate = 1;
+            window.speechSynthesis.speak(msg);
+        }
+
+        function showMessage(message, type = 'info') {
+            const box = document.getElementById('message-box');
+            let color = type === 'error' ? 'bg-red-600' : (type === 'success' ? 'bg-green-600' : 'bg-blue-600');
+            box.innerHTML = `<div class="${color} text-white p-4 rounded-xl shadow-2xl font-bold border-2 border-white/20">${message}</div>`;
+            box.classList.remove('translate-x-full');
+            box.classList.add('translate-x-0');
+            setTimeout(() => { box.classList.remove('translate-x-0'); box.classList.add('translate-x-full'); }, 3000);
+        }
+
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        function getCategoryColor(cat) {
+            const colors = { 'Neutral': 'bg-orange-600', 'Top': 'bg-blue-600', 'Bottom': 'bg-purple-600', 'Conditioning': 'bg-red-600', 'Specials': 'bg-emerald-600', 'Rest': 'bg-slate-700', 'Station': 'bg-yellow-600', 'Cool Down': 'bg-cyan-600' };
+            return colors[cat] || 'bg-gray-600';
+        }
+
+        function getTotalDuration() { return state.activities.reduce((sum, a) => sum + a.duration, 0); }
+
+        function getProgressPercentage() {
+            if (!state.activities.length) return 0;
+            const totalSecs = getTotalDuration() * 60;
+            const doneSecs = state.activities.slice(0, state.currentActivityIndex).reduce((sum, a) => sum + a.duration * 60, 0) + state.elapsedSeconds;
+            return Math.min((doneSecs / totalSecs) * 100, 100);
+        }
+
+        // --- Logic ---
+        function startTimer() {
+            if (state.intervalId) return;
+            const cur = state.activities[state.currentActivityIndex];
+            if (state.elapsedSeconds === 0 && cur) {
+                const title = cur.type === 'station' ? 'Rotation Starting' : `Starting ${cur.title}`;
+                speak(title); playWhistle();
+            }
+            state.isRunning = true;
+            state.intervalId = setInterval(() => {
+                state.elapsedSeconds++;
+                const cur = state.activities[state.currentActivityIndex];
+                if (cur && state.elapsedSeconds >= cur.duration * 60) {
+                    playWhistle();
+                    if (state.currentActivityIndex < state.activities.length - 1) {
+                        state.currentActivityIndex++;
+                        state.elapsedSeconds = 0;
+                        const next = state.activities[state.currentActivityIndex];
+                        speak(next.type === 'station' ? "Next up: Station Rotations" : `Next up: ${next.title}`);
+                    } else {
+                        pauseTimer();
+                        state.currentActivityIndex = state.activities.length;
+                        speak("Practice complete. Champions are made today.");
+                    }
+                }
+                render();
+            }, 1000);
+        }
+
+        function pauseTimer() {
+            if (state.intervalId) clearInterval(state.intervalId);
+            state.isRunning = false;
+            state.intervalId = null;
+            render();
+        }
+
+        function generatePrintPlan() {
+            const printArea = document.getElementById('print-area');
+            let html = `
+                <div class="print-header">
+                    <h1 style="font-size: 28px; font-weight: 900; text-transform: uppercase; margin: 0;">Wrestling Practice Plan</h1>
+                    <div style="display: flex; justify-content: space-between; margin-top: 10px; font-weight: bold;">
+                        <span>Date: ${state.practiceDate || 'N/A'}</span>
+                        <span>Time: ${state.startTime} - ${state.endTime}</span>
+                        <span>Total: ${getTotalDuration()} min</span>
+                    </div>
+                </div>
+                <div>
+            `;
+
+            state.activities.forEach((a, i) => {
+                html += `
+                    <div class="print-card">
+                        <div style="display: flex; justify-content: space-between; font-weight: 900; font-size: 16px;">
+                            <span>${i + 1}. ${a.type === 'station' ? 'GROUP SPLIT ROTATION' : a.title.toUpperCase()}</span>
+                            <span>${a.duration} min</span>
+                        </div>
+                        <div style="font-size: 11px; text-transform: uppercase; color: #666; margin-bottom: 5px;">Category: ${a.category || (a.type === 'station' ? 'Station' : 'Drill')}</div>
+                        ${a.description ? `<div style="font-size: 13px; margin-top: 5px;">${a.description}</div>` : ''}
+                        
+                        ${a.type === 'station' ? `
+                            <div class="print-station-grid">
+                                ${a.groups.map((g, gi) => `
+                                    <div class="print-station-box">
+                                        <div style="font-weight: bold; border-bottom: 1px solid #ddd; margin-bottom: 4px;">GROUP ${String.fromCharCode(65+gi)}</div>
+                                        <div style="font-weight: 900;">${g.title}</div>
+                                        <div style="font-size: 10px; color: #555;">${g.description || ''}</div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            html += `
+                </div>
+                <div style="margin-top: 30px; font-style: italic; font-size: 12px; text-align: center; border-top: 1px dashed #ccc; padding-top: 10px;">
+                    Champions are made in the practice room.
+                </div>
+            `;
+
+            printArea.innerHTML = html;
+            window.print();
+        }
+
+        // --- Render Logic ---
+        function render() {
+            const app = document.getElementById('app');
+            app.innerHTML = state.mode === 'setup' ? renderSetup() : renderLive();
+        }
+
+        function renderSetup() {
+            let content = '';
+            if (state.setupStep === 'details') content = renderDetails();
+            else if (state.setupStep === 'activities') content = renderLibrary();
+            else if (state.setupStep === 'schedule') content = renderSchedule();
+
+            const steps = [{id:'details',n:'Basic Info'},{id:'activities',n:'Drill Library'},{id:'schedule',n:'Final Schedule'}];
+
+            return `
+                <div class="flex-1 bg-gradient-to-br from-blue-950 via-gray-900 to-black overflow-y-auto custom-scrollbar flex flex-col">
+                    <header class="bg-blue-900 border-b-4 border-yellow-500 py-6 text-center shrink-0">
+                        <h1 class="text-4xl font-black text-yellow-400 italic uppercase">Wrestling Practice System</h1>
+                    </header>
+                    <nav class="bg-gray-800 border-b border-white/10 sticky top-0 z-50 p-2 flex gap-2 shrink-0">
+                        ${steps.map((s, i) => `
+                            <button onclick="state.setupStep='${s.id}';render();" class="flex-1 py-3 rounded-xl font-bold uppercase text-xs tracking-widest transition-all ${state.setupStep === s.id ? 'bg-blue-600 ring-2 ring-yellow-400 text-white' : 'text-gray-500 hover:bg-gray-700'}">
+                                ${i + 1}. ${s.n}
+                            </button>
+                        `).join('')}
+                    </nav>
+                    <main class="max-w-7xl mx-auto p-4 md:p-8 w-full flex-1">${content}</main>
+                </div>
+            `;
+        }
+
+        function renderDetails() {
+            return `
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    <div class="bg-gray-800 p-8 rounded-3xl border-2 border-blue-500 shadow-xl space-y-6">
+                        <h2 class="text-2xl font-black uppercase text-blue-400">Session Info</h2>
+                        <div class="space-y-4">
+                            <label class="block"><span class="text-xs font-bold uppercase opacity-50">Date</span><input oninput="state.practiceDate=this.value" type="date" value="${state.practiceDate}" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 focus:border-blue-500 outline-none transition-all" /></label>
+                            <div class="grid grid-cols-2 gap-4">
+                                <label class="block"><span class="text-xs font-bold uppercase opacity-50">Start</span><input oninput="state.startTime=this.value" type="time" value="${state.startTime}" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 outline-none" /></label>
+                                <label class="block"><span class="text-xs font-bold uppercase opacity-50">End</span><input oninput="state.endTime=this.value" type="time" value="${state.endTime}" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 outline-none" /></label>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-gray-800 p-8 rounded-3xl border-2 border-yellow-500 shadow-xl space-y-6">
+                        <h2 class="text-2xl font-black uppercase text-yellow-400">Settings</h2>
+                        <div class="space-y-4">
+                            <button onclick="state.options.enableWhistle=!state.options.enableWhistle;render();" class="w-full flex items-center justify-between p-4 bg-gray-900 rounded-xl border border-white/5">
+                                <div class="text-left"><div class="font-bold">Whistle Sounds</div><div class="text-xs opacity-50">Starts/Ends intervals</div></div>
+                                <div class="w-12 h-6 rounded-full ${state.options.enableWhistle ? 'bg-blue-600' : 'bg-gray-700'} relative transition-colors"><div class="absolute w-4 h-4 bg-white rounded-full top-1 transition-all ${state.options.enableWhistle ? 'left-7' : 'left-1'}"></div></div>
+                            </button>
+                            <button onclick="state.options.enableVoice=!state.options.enableVoice;render();" class="w-full flex items-center justify-between p-4 bg-gray-900 rounded-xl border border-white/5">
+                                <div class="text-left"><div class="font-bold">Voice Guide</div><div class="text-xs opacity-50">Announce moves</div></div>
+                                <div class="w-12 h-6 rounded-full ${state.options.enableVoice ? 'bg-blue-600' : 'bg-gray-700'} relative transition-colors"><div class="absolute w-4 h-4 bg-white rounded-full top-1 transition-all ${state.options.enableVoice ? 'left-7' : 'left-1'}"></div></div>
+                            </button>
+                            <div class="p-4 bg-gray-900 rounded-xl">
+                                <span class="text-xs font-bold uppercase opacity-50">Auto-Rest Between Drills</span>
+                                <select onchange="state.options.autoRestSeconds=parseInt(this.value)" class="w-full bg-transparent p-2 outline-none">
+                                    <option value="0">No rest</option><option value="30">30 Seconds</option><option value="60">1 Minute</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button onclick="state.setupStep='activities';render();" class="w-full bg-yellow-500 text-black py-6 rounded-3xl mt-8 text-2xl font-black uppercase shadow-xl hover:scale-[1.01] transition-transform active:scale-95">Go to Library &rarr;</button>
+            `;
+        }
+
+        function renderLibrary() {
+            const all = [...presetActivities, ...state.customActivities];
+            const categories = [...new Set(all.map(a => a.category))];
+            const selCount = Object.keys(state.selectedPresets).length;
+
+            return `
+                <div class="space-y-8">
+                    <div class="flex justify-between items-center bg-gray-800 p-6 rounded-3xl border-2 border-blue-500">
+                        <div><h2 class="text-2xl font-black uppercase text-blue-400 tracking-tighter">Drill Library</h2><p class="text-xs opacity-50">Tap cards to select</p></div>
+                        <button onclick="state.showCustomForm=!state.showCustomForm;render();" class="bg-blue-600 px-6 py-2 rounded-xl font-bold uppercase text-xs">New Custom Move</button>
+                    </div>
+
+                    ${state.showCustomForm ? `
+                        <div class="bg-gray-800 p-6 rounded-3xl border-2 border-yellow-500 grid grid-cols-1 md:grid-cols-3 gap-4 shadow-2xl">
+                            <input id="c-title" placeholder="Move Name" class="bg-gray-900 p-4 rounded-xl border border-gray-700" />
+                            <input id="c-dur" type="number" value="5" class="bg-gray-900 p-4 rounded-xl border border-gray-700" />
+                            <select id="c-cat" class="bg-gray-900 p-4 rounded-xl border border-gray-700">
+                                <option>Neutral</option><option>Top</option><option>Bottom</option><option>Conditioning</option><option>Cool Down</option>
+                            </select>
+                            <button onclick="addCustomDrill()" class="md:col-span-3 bg-green-600 py-4 rounded-xl font-black">SAVE TO LIBRARY</button>
+                        </div>
+                    ` : ''}
+
+                    <div class="space-y-10">
+                        ${categories.map(cat => `
+                            <div>
+                                <h3 class="text-sm font-black uppercase text-yellow-400 mb-4 border-l-4 border-yellow-500 pl-3">${cat} Drills</h3>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    ${all.filter(a => a.category === cat).map(a => `
+                                        <button onclick="togglePreset('${a.id}')" class="p-4 rounded-2xl text-left border-2 transition-all ${state.selectedPresets[a.id] ? 'bg-yellow-500 border-yellow-300 text-black scale-105 shadow-xl' : 'bg-gray-800 border-gray-700 hover:border-blue-500'}">
+                                            <div class="font-black uppercase tracking-tight truncate">${a.title}</div>
+                                            <div class="text-[10px] mt-1 opacity-60">${a.duration}m • ${a.description || cat}</div>
+                                        </button>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+                ${selCount > 0 ? `<div class="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-[60]"><button onclick="addSelectedToSchedule()" class="w-full bg-blue-600 py-6 rounded-3xl font-black text-xl border-4 border-blue-400 shadow-2xl shadow-blue-500/30">ADD ${selCount} DRILLS TO PRACTICE</button></div>` : ''}
+            `;
+        }
+
+        function renderSchedule() {
+            return `
+                <div class="space-y-6 pb-20">
+                    <div class="bg-gray-800 p-8 rounded-3xl border-2 border-yellow-500 shadow-xl">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-2xl font-black uppercase text-yellow-400 italic">Select Session Type</h2>
+                            ${state.activities.length > 0 ? `<button onclick="generatePrintPlan()" class="bg-white text-black px-6 py-2 rounded-xl font-black uppercase text-xs hover:bg-gray-200 transition-all flex items-center gap-2">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                                Print Plan
+                            </button>` : ''}
+                        </div>
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <button onclick="state.activities=[];showMessage('Empty practice created');render();" class="p-6 bg-gray-900 rounded-2xl border border-white/5 hover:border-blue-500 text-center">
+                                <div class="text-blue-400 font-black mb-2">TEAM PRACTICE</div>
+                                <div class="text-[10px] opacity-40">Start from scratch</div>
+                            </button>
+                            <button onclick="state.showSplitSelector=true;render();" class="p-6 bg-gray-900 rounded-2xl border border-white/5 hover:border-yellow-500 text-center">
+                                <div class="text-yellow-500 font-black mb-2">GROUP SPLIT</div>
+                                <div class="text-[10px] opacity-40">Dynamic stations</div>
+                            </button>
+                            <button onclick="loadTemplate('comp-warmup')" class="p-6 bg-gray-900 rounded-2xl border border-white/5 hover:border-red-500 text-center">
+                                <div class="text-red-500 font-black mb-2">COMP WARMUP</div>
+                                <div class="text-[10px] opacity-40">High-intensity prep</div>
+                            </button>
+                            <button onclick="loadTemplate('comp-cooldown')" class="p-6 bg-gray-900 rounded-2xl border border-white/5 hover:border-cyan-400 text-center">
+                                <div class="text-cyan-400 font-black mb-2">COMP COOLDOWN</div>
+                                <div class="text-[10px] opacity-40">Stretch & recover</div>
+                            </button>
+                        </div>
+                    </div>
+
+                    ${state.activities.length > 0 ? `
+                        <div class="space-y-4">
+                            ${state.activities.map((a, idx) => `
+                                <div class="bg-gray-800/80 p-6 rounded-3xl border border-white/5 flex items-center gap-4 relative">
+                                    <div class="flex flex-col gap-2">
+                                        <button onclick="moveDrill(${idx}, -1)" class="text-blue-500 disabled:opacity-20" ${idx === 0 ? 'disabled' : ''}>▲</button>
+                                        <button onclick="moveDrill(${idx}, 1)" class="text-blue-500 disabled:opacity-20" ${idx === state.activities.length - 1 ? 'disabled' : ''}>▼</button>
+                                    </div>
+                                    <div class="w-8 font-black text-2xl text-blue-500">${idx + 1}</div>
+                                    <div class="flex-1">
+                                        ${a.type === 'station' ? `
+                                            <div class="font-black uppercase text-yellow-500">Group Split Rotation (${a.duration}m)</div>
+                                            <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mt-2">
+                                                ${a.groups.map((g, gi) => `
+                                                    <div onclick="editStationGroup(${idx}, ${gi})" class="bg-gray-900 p-2 rounded-lg text-[10px] border border-white/5 cursor-pointer hover:bg-gray-700">
+                                                        <span class="font-bold text-blue-400">GRP ${String.fromCharCode(65+gi)}</span><br/>${g.title}
+                                                    </div>
+                                                `).join('')}
+                                            </div>
+                                        ` : `
+                                            <div class="font-black uppercase tracking-tight">${a.title}</div>
+                                            <div class="text-[10px] font-bold uppercase opacity-40">${a.category} • ${a.duration}m</div>
+                                        `}
+                                    </div>
+                                    <button onclick="state.activities.splice(${idx},1);render();" class="text-gray-600 hover:text-red-500 uppercase text-[10px] font-black">Remove</button>
+                                </div>
+                            `).join('')}
+                            <button onclick="state.mode='live';state.currentActivityIndex=0;state.elapsedSeconds=0;render();" class="w-full bg-green-600 py-10 rounded-[3rem] text-4xl font-black uppercase italic shadow-2xl border-b-[12px] border-green-800 active:border-b-0 active:translate-y-2 transition-all">Start Session</button>
+                        </div>
+                    ` : `
+                        <div class="bg-gray-800/20 border-2 border-dashed border-gray-700 p-20 rounded-[3rem] text-center text-gray-500 font-black uppercase tracking-widest italic">
+                            Practice schedule empty.<br/>Choose a type above to start.
+                        </div>
+                    `}
+                </div>
+
+                ${state.stationEditId !== null ? renderStationAssignModal() : ''}
+                ${state.showSplitSelector ? renderSplitSelector() : ''}
+            `;
+        }
+
+        function renderSplitSelector() {
+            return `
+                <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95">
+                    <div class="bg-gray-800 rounded-3xl border-2 border-yellow-500 p-10 text-center space-y-8 shadow-2xl">
+                        <h3 class="text-4xl font-black uppercase italic text-yellow-500 tracking-tighter">How many groups?</h3>
+                        <div class="flex gap-4 justify-center">
+                            ${[2, 3, 4, 5, 6].map(num => `
+                                <button onclick="createGroupSplit(${num})" class="w-20 h-20 rounded-2xl bg-gray-900 border-2 border-white/10 hover:border-blue-500 text-3xl font-black transition-all hover:scale-110">${num}</button>
+                            `).join('')}
+                        </div>
+                        <button onclick="state.showSplitSelector=false;render();" class="text-xs uppercase font-bold text-gray-500">Cancel</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStationAssignModal() {
+            const { aidx, gidx } = state.stationEditId;
+            const all = [...presetActivities, ...state.customActivities];
+            return `
+                <div class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
+                    <div class="bg-gray-800 rounded-3xl border-2 border-blue-500 w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
+                        <div class="p-6 border-b border-white/10 flex justify-between items-center bg-gray-900/50">
+                            <h3 class="text-2xl font-black uppercase italic">Assign to Group ${String.fromCharCode(65+gidx)}</h3>
+                            <button onclick="state.stationEditId=null;render();" class="text-2xl font-bold">✕</button>
+                        </div>
+                        <div class="p-6 overflow-y-auto custom-scrollbar grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                            ${all.map(a => `<button onclick="assignToStation(${aidx}, ${gidx}, '${a.id}')" class="p-4 bg-gray-900 rounded-2xl text-left hover:bg-blue-600 transition-all border border-white/5"><div class="text-[10px] uppercase font-bold opacity-40">${a.category}</div><div class="font-black text-xs uppercase">${a.title}</div></button>`).join('')}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderLive() {
+            const isDone = state.currentActivityIndex >= state.activities.length;
+            const cur = isDone ? null : state.activities[state.currentActivityIndex];
+            const next = isDone ? null : state.activities[state.currentActivityIndex+1];
+            const remSecs = cur ? (cur.duration * 60) - state.elapsedSeconds : 0;
+
+            let liveContent = '';
+            if (isDone) {
+                liveContent = `<div class="text-9xl font-black text-yellow-400 italic">FINISH</div><p class="text-3xl mt-4 opacity-50 uppercase tracking-widest font-black italic">Practice Complete</p>`;
+            } else if (cur.type === 'station') {
+                const count = cur.groups.length;
+                const gridClass = count <= 2 ? 'grid-cols-1 md:grid-cols-2' : (count <= 4 ? 'grid-cols-2' : 'grid-cols-2 md:grid-cols-3');
+                liveContent = `
+                    <div class="grid ${gridClass} gap-4 w-full h-full flex-1 mb-6">
+                        ${cur.groups.map((g, i) => `
+                            <div class="bg-gray-900/50 rounded-[2rem] border-2 border-blue-500/50 p-6 flex flex-col items-center justify-center text-center shadow-lg backdrop-blur">
+                                <div class="text-blue-500 font-black text-sm mb-2 tracking-widest">GROUP ${String.fromCharCode(65+i)}</div>
+                                <div class="text-xl md:text-3xl font-black uppercase leading-tight">${g.title}</div>
+                                <div class="text-[10px] opacity-40 mt-2 uppercase font-bold">${g.description || ''}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="text-[10rem] font-mono leading-none text-yellow-400 font-black">${formatTime(remSecs)}</div>
+                `;
+            } else {
+                liveContent = `
+                    <div class="text-blue-500 font-black tracking-[1em] mb-4 uppercase text-lg">Active Move</div>
+                    <div class="text-6xl md:text-[10rem] font-black uppercase mb-10 leading-none tracking-tighter italic">${cur.title}</div>
+                    <div class="bg-gray-900/80 p-16 rounded-[4rem] border-4 border-white/5 relative shadow-inner w-full max-w-4xl">
+                        <div class="text-[12rem] md:text-[18rem] font-mono leading-none font-black ${remSecs < 10 ? 'text-red-500 animate-pulse-fast' : 'text-yellow-400'}">${formatTime(remSecs)}</div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="flex-1 bg-black p-4 flex flex-col gap-6 font-black overflow-hidden h-screen">
+                    <div class="flex justify-between items-center text-xs text-gray-700 uppercase">
+                        <div>Live Session Engine v4.0</div>
+                        <div class="font-mono text-white/40">${new Date().toLocaleTimeString()}</div>
+                    </div>
+                    
+                    <div class="h-6 bg-gray-950 rounded-full border-2 border-gray-900 overflow-hidden shrink-0">
+                        <div class="h-full bg-gradient-to-r from-blue-700 via-blue-500 to-yellow-500 transition-all duration-1000 shadow-[0_0_30px_rgba(59,130,246,0.3)]" style="width: ${getProgressPercentage()}%"></div>
+                    </div>
+
+                    <div class="flex-1 flex flex-col items-center justify-center text-center">
+                        ${liveContent}
+                    </div>
+
+                    <div class="bg-gray-950 p-6 rounded-[4rem] border-t-2 border-white/5 shrink-0 flex items-center justify-between px-10">
+                        <div class="flex-1">
+                            <div class="text-blue-500 text-[10px] uppercase mb-1">Up Next</div>
+                            <div class="font-black text-2xl uppercase italic truncate max-w-[200px]">${next ? next.title : 'Finish'}</div>
+                        </div>
+                        <div class="flex items-center gap-6 flex-1 justify-center">
+                            <button onclick="state.currentActivityIndex=Math.max(0, state.currentActivityIndex-1);state.elapsedSeconds=0;render();" class="p-5 bg-gray-900 rounded-full text-white/30 hover:text-white transition-colors"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m11 17-5-5 5-5M18 17l-5-5 5-5"/></svg></button>
+                            <button onclick="toggleTimer()" class="p-14 rounded-full border-8 border-white/10 shadow-2xl transition-all active:scale-95 ${state.isRunning ? 'bg-yellow-500 text-black' : 'bg-blue-600 text-white'}">
+                                ${state.isRunning ? '<svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor"><rect width="4" height="16" x="6" y="4"/><rect width="4" height="16" x="14" y="4"/></svg>' : '<svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor"><path d="m5 3 14 9-14 9V3z"/></svg>'}
+                            </button>
+                            <button onclick="state.currentActivityIndex=Math.min(state.activities.length, state.currentActivityIndex+1);state.elapsedSeconds=0;render();" class="p-5 bg-gray-900 rounded-full text-white/30 hover:text-white transition-colors"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg></button>
+                        </div>
+                        <div class="flex-1 text-right">
+                             <button onclick="pauseTimer();state.mode='setup';render();" class="bg-gray-900 px-6 py-4 rounded-3xl text-[10px] uppercase font-black tracking-widest border border-white/5 hover:bg-red-950 transition-colors">Exit Session</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // --- Interaction Handlers ---
+        function togglePreset(id) {
+            if (state.selectedPresets[id]) delete state.selectedPresets[id];
+            else {
+                const item = [...presetActivities, ...state.customActivities].find(x => x.id === id);
+                state.selectedPresets[id] = { ...item };
+            }
+            render();
+        }
+
+        function addSelectedToSchedule() {
+            const toAdd = Object.values(state.selectedPresets).map(p => {
+                const list = [{...p, id: 'inst'+Math.random()}];
+                if (state.options.autoRestSeconds > 0) list.push({ id: 'rest'+Math.random(), title: 'Rest', category: 'Rest', duration: state.options.autoRestSeconds/60 });
+                return list;
+            }).flat();
+            state.activities.push(...toAdd);
+            state.selectedPresets = {}; state.setupStep = 'schedule'; render();
+        }
+
+        function createGroupSplit(num) {
+            const groups = [];
+            for(let i=0; i<num; i++) groups.push({ title: `Assign Drill ${String.fromCharCode(65+i)}`, id: null });
+            state.activities.push({ type: 'station', id: 'station'+Date.now(), duration: 10, groups });
+            state.showSplitSelector = false;
+            render();
+        }
+
+        function editStationGroup(aidx, gidx) { state.stationEditId = { aidx, gidx }; render(); }
+        function assignToStation(aidx, gidx, pid) {
+            const move = [...presetActivities, ...state.customActivities].find(x => x.id === pid);
+            state.activities[aidx].groups[gidx] = { ...move };
+            state.stationEditId = null;
+            render();
+        }
+
+        function loadTemplate(type) {
+            let activities = [];
+            if (type === 'comp-warmup') {
+                activities = [
+                    { title: 'Dynamic Warm-up', duration: 10, category: 'Neutral' },
+                    { title: 'Stance & Motion', duration: 5, category: 'Neutral' },
+                    { title: 'Hard Speed Shots', duration: 5, category: 'Neutral' },
+                    { title: 'Clearance Drills', duration: 5, category: 'Neutral' },
+                    { title: 'Mental Prep / Chalk Talk', duration: 5, category: 'Specials' }
+                ];
+            } else if (type === 'comp-cooldown') {
+                activities = [
+                    { title: 'Light Shadow Wrestling', duration: 3, category: 'Cool Down' },
+                    { title: 'Partner Static Stretching', duration: 7, category: 'Cool Down' },
+                    { title: 'Deep Breathing / Reflection', duration: 5, category: 'Cool Down' }
+                ];
+            }
+            state.activities = activities.map(a => ({...a, id: 'tmp'+Math.random()}));
+            showMessage(`${type.replace('-',' ')} loaded!`, 'success');
+            render();
+        }
+
+        function addCustomDrill() {
+            const t = document.getElementById('c-title').value;
+            const d = parseInt(document.getElementById('c-dur').value) || 5;
+            const c = document.getElementById('c-cat').value;
+            if (t) {
+                state.customActivities.push({ id: 'c'+Date.now(), title: t, duration: d, category: c });
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customActivities));
+                state.showCustomForm = false; render();
+            }
+        }
+
+        function moveDrill(idx, dir) {
+            const items = [...state.activities];
+            const n = idx + dir;
+            if (n >= 0 && n < items.length) { [items[idx], items[n]] = [items[n], items[idx]]; state.activities = items; render(); }
+        }
+
+        window.onload = () => {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) state.customActivities = JSON.parse(saved);
+            render();
+        };
+    </script>
+</body>
+</html>
