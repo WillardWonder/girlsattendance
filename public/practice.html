@@ -51,6 +51,87 @@
     <!-- Message Box -->
     <div id="message-box" class="fixed top-4 right-4 z-[100] transition-transform duration-300 transform translate-x-full no-print"></div>
 
+    <!-- Auth Modal (Fallback if Anonymous is disabled) -->
+    <div id="auth-modal" class="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center p-4 hidden">
+        <div class="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm">
+            <h2 class="text-xl font-bold text-white mb-4 text-center">Authentication Required</h2>
+            <p class="text-gray-400 text-sm mb-4 text-center">Please sign in to save practice plans.</p>
+            <form id="loginForm" class="space-y-4">
+                <input type="email" id="email" placeholder="Email" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:outline-none" required>
+                <input type="password" id="password" placeholder="Password" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:outline-none" required>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all">Sign In</button>
+            </form>
+            <div id="loginError" class="text-red-500 text-xs mt-2 text-center hidden"></div>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+
+        // --- FIREBASE CONFIGURATION ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
+            authDomain: "girls-wrestling-attendance.firebaseapp.com",
+            projectId: "girls-wrestling-attendance",
+            storageBucket: "girls-wrestling-attendance.firebasestorage.app",
+            messagingSenderId: "509878173460",
+            appId: "1:509878173460:web:d8d0133cbc5718ce9fcc01",
+            measurementId: "G-CVY2FGY8L2"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // Make DB available globally
+        window.db = db;
+        window.addDoc = addDoc;
+        window.collection = collection;
+        window.serverTimestamp = serverTimestamp;
+
+        // --- Auth Logic ---
+        const authModal = document.getElementById('auth-modal');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+
+        // Check auth state
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in.
+                authModal.classList.add('hidden');
+                console.log("Authenticated as:", user.uid);
+            } else {
+                // No user is signed in. Try anonymous.
+                console.log("No user, attempting anonymous auth...");
+                signInAnonymously(auth).catch((error) => {
+                    console.error("Anon Auth Failed:", error.code);
+                    // If Anon fails (e.g. restricted), show login modal
+                    authModal.classList.remove('hidden');
+                });
+            }
+        });
+
+        // Handle Manual Login
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            loginError.classList.add('hidden');
+
+            try {
+                await signInWithEmailAndPassword(auth, email, password);
+                // onAuthStateChanged will handle the rest
+            } catch (error) {
+                loginError.textContent = error.message;
+                loginError.classList.remove('hidden');
+            }
+        });
+    </script>
+
     <script>
         // --- Library Data ---
         const presetActivities = [
@@ -112,7 +193,7 @@
         let state = {
             mode: 'setup', 
             setupStep: 'details', 
-            practiceDate: '',
+            practiceDate: new Date().toISOString().split('T')[0],
             startTime: '15:30',
             endTime: '17:00',
             activities: [], 
@@ -172,11 +253,6 @@
             return `${mins}:${secs.toString().padStart(2, '0')}`;
         }
 
-        function getCategoryColor(cat) {
-            const colors = { 'Neutral': 'bg-orange-600', 'Top': 'bg-blue-600', 'Bottom': 'bg-purple-600', 'Conditioning': 'bg-red-600', 'Specials': 'bg-emerald-600', 'Rest': 'bg-slate-700', 'Station': 'bg-yellow-600', 'Cool Down': 'bg-cyan-600' };
-            return colors[cat] || 'bg-gray-600';
-        }
-
         function getTotalDuration() { return state.activities.reduce((sum, a) => sum + a.duration, 0); }
 
         function getProgressPercentage() {
@@ -187,6 +263,36 @@
         }
 
         // --- Logic ---
+        async function startPractice() {
+            // 1. Save to Firebase
+            if (window.addDoc && window.collection && window.db) {
+                try {
+                    await window.addDoc(window.collection(window.db, "practice_plans"), {
+                        date: state.practiceDate,
+                        startTime: state.startTime,
+                        endTime: state.endTime,
+                        activities: state.activities,
+                        totalDuration: getTotalDuration(),
+                        timestamp: window.serverTimestamp(),
+                        createdAt: new Date().toISOString()
+                    });
+                    showMessage('Practice Plan Saved to Cloud!', 'success');
+                } catch (err) {
+                    console.error("Firebase Save Error", err);
+                    showMessage('Running Offline (Plan not saved to cloud)', 'info');
+                }
+            } else {
+                showMessage('Database connecting...', 'info');
+            }
+
+            // 2. Start the Timer UI
+            state.mode = 'live';
+            state.currentActivityIndex = 0;
+            state.elapsedSeconds = 0;
+            render();
+            startTimer();
+        }
+
         function startTimer() {
             if (state.intervalId) return;
             const cur = state.activities[state.currentActivityIndex];
@@ -383,9 +489,9 @@
 
                     ${state.showCustomForm ? `
                         <div class="bg-gray-800 p-6 rounded-3xl border-2 border-yellow-500 grid grid-cols-1 md:grid-cols-3 gap-4 shadow-2xl">
-                            <input id="c-title" placeholder="Move Name" class="bg-gray-900 p-4 rounded-xl border border-gray-700" />
-                            <input id="c-dur" type="number" value="5" class="bg-gray-900 p-4 rounded-xl border border-gray-700" />
-                            <select id="c-cat" class="bg-gray-900 p-4 rounded-xl border border-gray-700">
+                            <input id="c-title" placeholder="Move Name" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white" />
+                            <input id="c-dur" type="number" value="5" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white" />
+                            <select id="c-cat" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white">
                                 <option>Neutral</option><option>Top</option><option>Bottom</option><option>Conditioning</option><option>Cool Down</option>
                             </select>
                             <button onclick="addCustomDrill()" class="md:col-span-3 bg-green-600 py-4 rounded-xl font-black">SAVE TO LIBRARY</button>
@@ -398,7 +504,7 @@
                                 <h3 class="text-sm font-black uppercase text-yellow-400 mb-4 border-l-4 border-yellow-500 pl-3">${cat} Drills</h3>
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                     ${all.filter(a => a.category === cat).map(a => `
-                                        <button onclick="togglePreset('${a.id}')" class="p-4 rounded-2xl text-left border-2 transition-all ${state.selectedPresets[a.id] ? 'bg-yellow-500 border-yellow-300 text-black scale-105 shadow-xl' : 'bg-gray-800 border-gray-700 hover:border-blue-500'}">
+                                        <button onclick="togglePreset('${a.id}')" class="p-4 rounded-2xl text-left border-2 transition-all ${state.selectedPresets[a.id] ? 'bg-yellow-500 border-yellow-300 text-black scale-105 shadow-xl' : 'bg-gray-800 border-gray-700 hover:border-blue-500 text-white'}">
                                             <div class="font-black uppercase tracking-tight truncate">${a.title}</div>
                                             <div class="text-[10px] mt-1 opacity-60">${a.duration}m • ${a.description || cat}</div>
                                         </button>
@@ -408,7 +514,7 @@
                         `).join('')}
                     </div>
                 </div>
-                ${selCount > 0 ? `<div class="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-[60]"><button onclick="addSelectedToSchedule()" class="w-full bg-blue-600 py-6 rounded-3xl font-black text-xl border-4 border-blue-400 shadow-2xl shadow-blue-500/30 uppercase tracking-tighter">ADD ${selCount} DRILLS TO PRACTICE</button></div>` : ''}
+                ${selCount > 0 ? `<div class="fixed bottom-8 left-1/2 -translate-x-1/2 w-full max-w-lg px-4 z-[60]"><button onclick="addSelectedToSchedule()" class="w-full bg-blue-600 py-6 rounded-3xl font-black text-xl border-4 border-blue-400 shadow-2xl shadow-blue-500/30 uppercase tracking-tighter text-white">ADD ${selCount} DRILLS TO PRACTICE</button></div>` : ''}
             `;
         }
 
@@ -423,7 +529,6 @@
                         </div>
                         <div class="flex gap-2">
                              <button onclick="generatePrintPlan()" class="bg-white text-black px-8 py-3 rounded-2xl font-black uppercase text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-lg">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
                                 Print Plan
                             </button>
                         </div>
@@ -460,7 +565,7 @@
                                 </div>
                             `).join('')}
                             
-                            <button onclick="state.mode='live';state.currentActivityIndex=0;state.elapsedSeconds=0;render();" class="w-full bg-green-600 py-10 rounded-[3rem] text-4xl font-black uppercase italic shadow-2xl border-b-[12px] border-green-800 active:border-b-0 active:translate-y-2 transition-all mt-10">START PRACTICE SESSION</button>
+                            <button onclick="startPractice()" class="w-full bg-green-600 py-10 rounded-[3rem] text-4xl font-black uppercase italic shadow-2xl border-b-[12px] border-green-800 active:border-b-0 active:translate-y-2 transition-all mt-10">START PRACTICE SESSION</button>
                         </div>
                     ` : `
                         <div class="bg-gray-800/20 border-2 border-dashed border-gray-700 p-20 rounded-[3rem] text-center text-gray-500 font-black uppercase tracking-widest italic">
@@ -654,6 +759,12 @@
             const items = [...state.activities];
             const n = idx + dir;
             if (n >= 0 && n < items.length) { [items[idx], items[n]] = [items[n], items[idx]]; state.activities = items; render(); }
+        }
+        
+        function toggleTimer() {
+            if(state.isRunning) pauseTimer();
+            else startTimer();
+            render();
         }
 
         window.onload = () => {
