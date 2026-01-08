@@ -90,6 +90,10 @@
     </script>
 
     <script>
+        // --- CONFIGURATION ---
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzNBJdt_3dEJs9pRukUfRduhd9IkY6n1ZcQ3MhkbqxJ8ThxFIusYb3aGYrCbUYhhkY/exec";
+        const GOOGLE_CALENDAR_ID = "24d802fd6bba1a39b3c5818f3d4e1e3352a58526261be9342453808f0423b426@group.calendar.google.com";
+
         // --- Library Data ---
         const presetActivities = [
             // NEUTRAL / OFFENSE
@@ -252,6 +256,47 @@
             state.elapsedSeconds = 0;
             render();
             startTimer();
+        }
+
+        async function uploadToCalendar() {
+            const btn = document.getElementById('cal-upload-btn');
+            if(btn) { btn.innerText = "Uploading..."; btn.disabled = true; }
+            
+            // 1. Format Description
+            const description = `FOCUS: Wrestling Practice\n\nAGENDA:\n` + 
+                state.activities.map((item, i) => {
+                    if (item.type === 'station') return `- [${item.duration}m] STATION ROTATION`;
+                    return `- [${item.duration}m] ${item.title.toUpperCase()} (${item.category})`;
+                }).join('\n');
+
+            // 2. Construct Payload
+            const startDateTime = new Date(`${state.practiceDate}T${state.startTime}`).toISOString();
+            const endDateTime = new Date(`${state.practiceDate}T${state.endTime}`).toISOString();
+
+            const payload = {
+                calendarId: GOOGLE_CALENDAR_ID,
+                event: {
+                    title: `Wrestling Practice`,
+                    location: "Wrestling Room",
+                    description: description,
+                    startTime: startDateTime,
+                    endTime: endDateTime
+                }
+            };
+
+            try {
+                await fetch(GOOGLE_SCRIPT_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                    body: JSON.stringify(payload)
+                });
+                showMessage('Uploaded to Team Calendar!', 'success');
+            } catch (error) {
+                console.error("Upload failed", error);
+                showMessage('Failed to upload. Check console.', 'error');
+            } finally {
+                if(btn) { btn.innerHTML = 'UPLOAD TO CALENDAR'; btn.disabled = false; }
+            }
         }
 
         function startTimer() {
@@ -490,8 +535,12 @@
                             <h2 class="text-3xl font-black uppercase text-yellow-400 italic">Review Final Schedule</h2>
                             <div class="text-xs font-bold uppercase text-gray-400 mt-1">${state.activities.length} Drills Organized • ${getTotalDuration()} Minutes Total</div>
                         </div>
-                        <div class="flex gap-2"> 
-                            <button onclick="generatePrintPlan()" class="bg-white text-black px-8 py-3 rounded-2xl font-black uppercase text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-lg">
+                        <div class="flex gap-2">
+                            <!-- NEW BUTTON HERE -->
+                            <button id="cal-upload-btn" onclick="uploadToCalendar()" class="bg-blue-600 text-white px-6 py-3 rounded-2xl font-black uppercase text-sm hover:bg-blue-500 transition-all flex items-center gap-2 shadow-lg">
+                                Upload to Calendar
+                            </button>
+                             <button onclick="generatePrintPlan()" class="bg-white text-black px-6 py-3 rounded-2xl font-black uppercase text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-lg">
                                 Print Plan
                             </button>
                         </div>
