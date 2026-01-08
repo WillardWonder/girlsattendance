@@ -265,8 +265,9 @@
             // 1. Format Description
             const description = `FOCUS: Wrestling Practice\n\nAGENDA:\n` + 
                 state.activities.map((item, i) => {
-                    if (item.type === 'station') return `- [${item.duration}m] STATION ROTATION`;
-                    return `- [${item.duration}m] ${item.title.toUpperCase()} (${item.category})`;
+                    let noteText = item.notes ? ` (Note: ${item.notes})` : '';
+                    if (item.type === 'station') return `- [${item.duration}m] STATION ROTATION${noteText}`;
+                    return `- [${item.duration}m] ${item.title.toUpperCase()} (${item.category})${noteText}`;
                 }).join('\n');
 
             // 2. Construct Payload
@@ -334,6 +335,29 @@
             render();
         }
 
+        function duplicateDrill(idx) {
+            // Create a deep copy of the drill
+            const original = state.activities[idx];
+            const copy = JSON.parse(JSON.stringify(original));
+            copy.id = 'copy' + Math.random(); // Ensure unique ID
+            // Insert after current index
+            state.activities.splice(idx + 1, 0, copy);
+            render();
+        }
+
+        function updateDrillDuration(idx, change) {
+            const newDur = state.activities[idx].duration + change;
+            if (newDur >= 1) {
+                state.activities[idx].duration = newDur;
+                render(); // Re-render to update UI and total time calculation
+            }
+        }
+
+        function updateDrillNote(idx, note) {
+            // Update state without re-rendering to keep input focus
+            state.activities[idx].notes = note;
+        }
+
         function generatePrintPlan() {
             const printArea = document.getElementById('print-area');
             let html = `
@@ -357,6 +381,7 @@
                         </div>
                         <div style="font-size: 11px; text-transform: uppercase; color: #666; margin-bottom: 5px;">Category: ${a.category || (a.type === 'station' ? 'Station' : 'Drill')}</div>
                         ${a.description ? `<div style="font-size: 13px; margin-top: 5px;">${a.description}</div>` : ''}
+                        ${a.notes ? `<div style="font-size: 13px; margin-top: 5px; font-weight: bold; color: #444;">NOTE: ${a.notes}</div>` : ''}
                         
                         ${a.type === 'station' ? `
                             <div class="print-station-grid">
@@ -549,31 +574,65 @@
                     ${state.activities.length > 0 ? `
                         <div class="space-y-3">
                             ${state.activities.map((a, idx) => `
-                                <div class="bg-gray-800/80 p-5 rounded-2xl border border-white/5 flex items-center gap-4 relative group">
-                                    <div class="flex flex-col gap-1 opacity-40 group-hover:opacity-100 transition-opacity">
+                                <div class="bg-gray-800/80 p-5 rounded-2xl border border-white/5 flex flex-col md:flex-row items-center gap-4 relative group">
+                                    <div class="flex flex-row md:flex-col gap-1 opacity-100 md:opacity-40 group-hover:opacity-100 transition-opacity">
                                         <button onclick="moveDrill(${idx}, -1)" class="text-blue-500 hover:text-white" ${idx === 0 ? 'disabled' : ''}>▲</button>
                                         <button onclick="moveDrill(${idx}, 1)" class="text-blue-500 hover:text-white" ${idx === state.activities.length - 1 ? 'disabled' : ''}>▼</button>
                                     </div>
                                     <div class="w-10 font-black text-3xl text-blue-500/50">${idx + 1}</div>
-                                    <div class="flex-1">
+                                    <div class="flex-1 w-full">
                                         ${a.type === 'station' ? `
-                                            <div class="font-black uppercase text-yellow-500 tracking-tight">Group Split Rotation (${a.duration}m)</div>
+                                            <div class="flex items-center gap-3 mb-2">
+                                                <div class="font-black uppercase text-yellow-500 tracking-tight">Group Split Rotation</div>
+                                                <div class="flex items-center bg-gray-900 rounded-lg border border-white/10 overflow-hidden">
+                                                    <button onclick="updateDrillDuration(${idx}, -1)" class="px-3 py-1 hover:bg-white/10 text-yellow-400 font-bold transition-colors">-</button>
+                                                    <span class="text-xs font-bold px-2 text-white min-w-[3rem] text-center">${a.duration}m</span>
+                                                    <button onclick="updateDrillDuration(${idx}, 1)" class="px-3 py-1 hover:bg-white/10 text-yellow-400 font-bold transition-colors">+</button>
+                                                </div>
+                                            </div>
                                             <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 mt-3">
                                                 ${a.groups.map((g, gi) => `
-                                                    <div onclick="editStationGroup(${idx}, ${gi})" class="bg-gray-900 p-3 rounded-xl text-[10px] border border-white/5 cursor-pointer hover:bg-blue-600/20 hover:border-blue-500 transition-all">
+                                                    <div onclick="editStationGroup(${idx}, ${gi})" class="${g.id ? 'bg-gray-900 border-white/5' : 'bg-gray-900/50 border-yellow-500/50 border-dashed animate-pulse'} p-3 rounded-xl text-[10px] border cursor-pointer hover:bg-blue-600/20 hover:border-blue-500 transition-all">
                                                         <span class="font-black text-blue-400 uppercase tracking-widest">GRP ${String.fromCharCode(65+gi)}</span><br/>
-                                                        <span class="font-bold text-white uppercase">${g.title}</span>
+                                                        <span class="font-bold ${g.id ? 'text-white' : 'text-yellow-500 italic'} uppercase">${g.title}</span>
                                                     </div>
                                                 `).join('')}
                                             </div>
                                         ` : `
                                             <div class="font-black uppercase tracking-tight text-lg">${a.title}</div>
-                                            <div class="text-[10px] font-black uppercase text-gray-500">${a.category} • ${a.duration} Minutes</div>
+                                            <div class="flex items-center gap-2 mt-1">
+                                                <span class="text-[10px] font-black uppercase text-gray-500">${a.category}</span>
+                                                <span class="text-gray-600">•</span>
+                                                <div class="flex items-center bg-gray-900 rounded-lg border border-white/10 overflow-hidden">
+                                                    <button onclick="updateDrillDuration(${idx}, -1)" class="px-2 py-0.5 hover:bg-white/10 text-blue-400 font-bold transition-colors">-</button>
+                                                    <span class="text-xs font-bold px-2 text-white min-w-[2.5rem] text-center">${a.duration}m</span>
+                                                    <button onclick="updateDrillDuration(${idx}, 1)" class="px-2 py-0.5 hover:bg-white/10 text-blue-400 font-bold transition-colors">+</button>
+                                                </div>
+                                            </div>
                                         `}
+                                        <!-- NOTES FIELD -->
+                                        <div class="mt-2">
+                                            <input 
+                                                type="text" 
+                                                placeholder="Add notes (e.g. 'Focus on hand fighting')..." 
+                                                value="${a.notes || ''}" 
+                                                oninput="updateDrillNote(${idx}, this.value)"
+                                                class="w-full bg-gray-900/50 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:border-blue-500 focus:outline-none transition-colors"
+                                            />
+                                        </div>
                                     </div>
-                                    <button onclick="state.activities.splice(${idx},1);render();" class="text-gray-700 hover:text-red-500 transition-colors">
-                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                                    </button>
+                                    
+                                    <div class="flex items-center gap-2">
+                                        <!-- DUPLICATE BUTTON -->
+                                        <button onclick="duplicateDrill(${idx})" title="Duplicate Drill" class="p-2 text-gray-500 hover:text-blue-400 transition-colors bg-gray-900 rounded-lg border border-white/5">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        </button>
+                                        
+                                        <!-- DELETE BUTTON -->
+                                        <button onclick="state.activities.splice(${idx},1);render();" title="Remove Drill" class="p-2 text-gray-500 hover:text-red-500 transition-colors bg-gray-900 rounded-lg border border-white/5">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                        </button>
+                                    </div>
                                 </div>
                             `).join('')}
                             
@@ -652,6 +711,7 @@
                 liveContent = `
                     <div class="text-blue-500 font-black tracking-[1em] mb-4 uppercase text-lg">Active Move</div>
                     <div class="text-6xl md:text-[10rem] font-black uppercase mb-10 leading-none tracking-tighter italic">${cur.title}</div>
+                    ${cur.notes ? `<div class="text-2xl font-bold text-yellow-400 mb-6 bg-gray-900/50 px-6 py-2 rounded-xl border border-white/10">NOTE: ${cur.notes}</div>` : ''}
                     <div class="bg-gray-900/80 p-16 rounded-[4rem] border-4 border-white/5 relative shadow-inner w-full max-w-4xl">
                         <div class="text-[12rem] md:text-[18rem] font-mono leading-none font-black ${remSecs < 10 ? 'text-red-500 animate-pulse-fast' : 'text-yellow-400'}">${formatTime(remSecs)}</div>
                     </div>
@@ -717,11 +777,12 @@
 
         function createGroupSplit(num) {
             const groups = [];
-            for(let i=0; i<num; i++) groups.push({ title: `Assign Move ${String.fromCharCode(65+i)}`, id: null });
+            for(let i=0; i<num; i++) groups.push({ title: `TAP TO ASSIGN`, description: 'Select drill for Group ' + String.fromCharCode(65+i), id: null });
             state.activities.push({ type: 'station', id: 'station'+Date.now(), duration: 10, groups });
             state.showSplitSelector = false;
-            state.setupStep = 'activities'; // Go to library so user can choose drills for these slots
-            showMessage(`Created split for ${num} groups! Now choose moves in the library.`, 'success');
+            // CHANGE: Redirect to SCHEDULE (Step 3) so user sees the station boxes
+            state.setupStep = 'schedule'; 
+            showMessage(`Created split! Tap the group boxes to assign specific drills.`, 'success');
             render();
         }
 
