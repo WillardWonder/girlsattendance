@@ -13,7 +13,6 @@
             background-color: #0d111c; 
             color: white; 
         }
-
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #3b82f6; border-radius: 10px; }
         .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
@@ -27,7 +26,7 @@
                 border: 1px solid #ddd; 
                 margin-bottom: 10px; 
                 padding: 10px; 
-                page-break-inside: avoid; 
+                page-break-inside: avoid;
                 color: black !important;
             }
             .print-header { border-bottom: 3px solid black; margin-bottom: 20px; padding-bottom: 10px; }
@@ -51,83 +50,41 @@
     <!-- Message Box -->
     <div id="message-box" class="fixed top-4 right-4 z-[100] transition-transform duration-300 transform translate-x-full no-print"></div>
 
-    <!-- Auth Modal (Fallback if Anonymous is disabled) -->
-    <div id="auth-modal" class="fixed inset-0 z-[150] bg-black/90 flex items-center justify-center p-4 hidden">
-        <div class="bg-gray-800 p-8 rounded-2xl border border-gray-700 w-full max-w-sm">
-            <h2 class="text-xl font-bold text-white mb-4 text-center">Authentication Required</h2>
-            <p class="text-gray-400 text-sm mb-4 text-center">Please sign in to save practice plans.</p>
-            <form id="loginForm" class="space-y-4">
-                <input type="email" id="email" placeholder="Email" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:outline-none" required>
-                <input type="password" id="password" placeholder="Password" class="w-full bg-gray-900 border border-gray-600 rounded-lg p-3 text-white focus:outline-none" required>
-                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl transition-all">Sign In</button>
-            </form>
-            <div id="loginError" class="text-red-500 text-xs mt-2 text-center hidden"></div>
-        </div>
-    </div>
-
     <!-- Firebase SDKs -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- FIREBASE CONFIGURATION ---
-        const firebaseConfig = {
-            apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
-            authDomain: "girls-wrestling-attendance.firebaseapp.com",
-            projectId: "girls-wrestling-attendance",
-            storageBucket: "girls-wrestling-attendance.firebasestorage.app",
-            messagingSenderId: "509878173460",
-            appId: "1:509878173460:web:d8d0133cbc5718ce9fcc01",
-            measurementId: "G-CVY2FGY8L2"
-        };
-
-        // Initialize Firebase
+        // --- FIREBASE CONFIGURATION (Environment Aware) ---
+        const firebaseConfig = JSON.parse(__firebase_config);
         const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
         const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // Make DB available globally
         window.db = db;
         window.addDoc = addDoc;
         window.collection = collection;
         window.serverTimestamp = serverTimestamp;
+        window.appId = appId;
+        window.currentUser = null;
 
         // --- Auth Logic ---
-        const authModal = document.getElementById('auth-modal');
-        const loginForm = document.getElementById('loginForm');
-        const loginError = document.getElementById('loginError');
+        async function initAuth() {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        }
+        initAuth();
 
-        // Check auth state
         onAuthStateChanged(auth, (user) => {
             if (user) {
-                // User is signed in.
-                authModal.classList.add('hidden');
-                console.log("Authenticated as:", user.uid);
-            } else {
-                // No user is signed in. Try anonymous.
-                console.log("No user, attempting anonymous auth...");
-                signInAnonymously(auth).catch((error) => {
-                    console.error("Anon Auth Failed:", error.code);
-                    // If Anon fails (e.g. restricted), show login modal
-                    authModal.classList.remove('hidden');
-                });
-            }
-        });
-
-        // Handle Manual Login
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
-            loginError.classList.add('hidden');
-
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                // onAuthStateChanged will handle the rest
-            } catch (error) {
-                loginError.textContent = error.message;
-                loginError.classList.remove('hidden');
+                window.currentUser = user;
+                console.log("Authenticated");
             }
         });
     </script>
@@ -135,21 +92,23 @@
     <script>
         // --- Library Data ---
         const presetActivities = [
-            // NEUTRAL
-            { id: 'n1', title: 'Duck Walk', duration: 5, category: 'Neutral' },
-            { id: 'n2', title: 'Penetration Drills', duration: 10, description: 'Double or High Crotch', category: 'Neutral' },
-            { id: 'n3', title: 'Stagger Stance/Motion', duration: 5, description: 'Head, elbow, feet', category: 'Neutral' },
-            { id: 'n4', title: 'Snap Down / Head Draw', duration: 5, category: 'Neutral' },
-            { id: 'n5', title: 'Single Leg Treetops', duration: 5, category: 'Neutral' },
-            { id: 'n6', title: 'Single Leg Run Pipes', duration: 5, category: 'Neutral' },
-            { id: 'n7', title: 'Post-n-Run', duration: 5, description: 'Creating angles from mat', category: 'Neutral' },
-            { id: 'n8', title: 'High Crotch (Variations)', duration: 10, description: 'Elbow tie, underhooks, inside/outside', category: 'Neutral' },
-            { id: 'n9', title: 'Double Leg (Lifts/Chops)', duration: 10, description: 'Kneechop, lift, turks, get to corner', category: 'Neutral' },
-            { id: 'n10', title: 'Firemans / Dump / Tip', duration: 5, category: 'Neutral' },
-            { id: 'n11', title: 'Throws', duration: 10, description: 'Head & arm, Hip toss, Back step', category: 'Neutral' },
-            { id: 'n12', title: 'Randy Lewis Elbow Block', duration: 5, category: 'Neutral' },
-            { id: 'n13', title: 'Situation Drills (Live)', duration: 15, description: 'In on a double/single', category: 'Neutral' },
-            { id: 'n14', title: 'IRONMAN', duration: 8, description: 'Neutral intensity', category: 'Neutral' },
+            // NEUTRAL / OFFENSE
+            { id: 'n1', title: 'Duck Walk', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n2', title: 'Penetration Drills', duration: 10, description: 'Double or High Crotch', category: 'Neutral / Offense' },
+            { id: 'n3', title: 'Stagger Stance/Motion', duration: 5, description: 'Head, elbow, feet', category: 'Neutral / Offense' },
+            { id: 'n4', title: 'Snap Down / Head Draw', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n5', title: 'Single Leg Treetops', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n6', title: 'Single Leg Run Pipes', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n7', title: 'Post-n-Run', duration: 5, description: 'Creating angles from mat', category: 'Neutral / Offense' },
+            { id: 'n8', title: 'High Crotch (Variations)', duration: 10, description: 'Elbow tie, underhooks, inside/outside', category: 'Neutral / Offense' },
+            { id: 'n9', title: 'Double Leg (Lifts/Chops)', duration: 10, description: 'Kneechop, lift, turks, get to corner', category: 'Neutral / Offense' },
+            { id: 'n10', title: 'Firemans / Dump / Tip', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n11', title: 'Throws', duration: 10, description: 'Head & arm, Hip toss, Back step', category: 'Neutral / Offense' },
+            { id: 'n12', title: 'Randy Lewis Elbow Block', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n13', title: 'Situation Drills (Live)', duration: 15, description: 'In on a double/single', category: 'Neutral / Offense' },
+            { id: 'n14', title: 'IRONMAN', duration: 8, description: 'Neutral intensity', category: 'Neutral / Offense' },
+            { id: 'n15', title: 'Offensive Attack Series', duration: 10, description: 'Setups to Shot to Finish', category: 'Neutral / Offense' },
+            { id: 'n16', title: 'Chain Wrestling (Offense)', duration: 10, description: 'Shot 1 -> Shot 2 -> Shot 3', category: 'Neutral / Offense' },
 
             // TOP
             { id: 't1', title: 'Spiral Ride', duration: 5, description: 'Halfs, bar arms, hooks', category: 'Top' },
@@ -265,9 +224,11 @@
         // --- Logic ---
         async function startPractice() {
             // 1. Save to Firebase
-            if (window.addDoc && window.collection && window.db) {
+            if (window.currentUser && window.db) {
                 try {
-                    await window.addDoc(window.collection(window.db, "practice_plans"), {
+                    // Save to user's private collection
+                    const path = window.collection(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "practice_plans");
+                    await window.addDoc(path, {
                         date: state.practiceDate,
                         startTime: state.startTime,
                         endTime: state.endTime,
@@ -279,10 +240,10 @@
                     showMessage('Practice Plan Saved to Cloud!', 'success');
                 } catch (err) {
                     console.error("Firebase Save Error", err);
-                    showMessage('Running Offline (Plan not saved to cloud)', 'info');
+                    showMessage('Running Offline (Save Failed)', 'error');
                 }
             } else {
-                showMessage('Database connecting...', 'info');
+                showMessage('Running Offline', 'info');
             }
 
             // 2. Start the Timer UI
@@ -437,8 +398,10 @@
                                 </button>
                                 <div class="p-4 bg-gray-900 rounded-xl">
                                     <span class="text-xs font-bold uppercase opacity-50">Auto-Rest Between Drills</span>
-                                    <select onchange="state.options.autoRestSeconds=parseInt(this.value)" class="w-full bg-transparent p-2 outline-none">
-                                        <option value="0">No rest</option><option value="30">30 Seconds</option><option value="60">1 Minute</option>
+                                    <select onchange="state.options.autoRestSeconds=parseInt(this.value)" class="w-full bg-gray-900 p-2 outline-none border border-gray-700 rounded-lg text-white mt-1">
+                                        <option value="0" class="bg-gray-900">No rest</option>
+                                        <option value="30" class="bg-gray-900">30 Seconds</option>
+                                        <option value="60" class="bg-gray-900">1 Minute</option>
                                     </select>
                                 </div>
                             </div>
@@ -492,7 +455,7 @@
                             <input id="c-title" placeholder="Move Name" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white" />
                             <input id="c-dur" type="number" value="5" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white" />
                             <select id="c-cat" class="bg-gray-900 p-4 rounded-xl border border-gray-700 text-white">
-                                <option>Neutral</option><option>Top</option><option>Bottom</option><option>Conditioning</option><option>Cool Down</option>
+                                <option>Neutral / Offense</option><option>Top</option><option>Bottom</option><option>Conditioning</option><option>Cool Down</option>
                             </select>
                             <button onclick="addCustomDrill()" class="md:col-span-3 bg-green-600 py-4 rounded-xl font-black">SAVE TO LIBRARY</button>
                         </div>
@@ -527,8 +490,8 @@
                             <h2 class="text-3xl font-black uppercase text-yellow-400 italic">Review Final Schedule</h2>
                             <div class="text-xs font-bold uppercase text-gray-400 mt-1">${state.activities.length} Drills Organized • ${getTotalDuration()} Minutes Total</div>
                         </div>
-                        <div class="flex gap-2">
-                             <button onclick="generatePrintPlan()" class="bg-white text-black px-8 py-3 rounded-2xl font-black uppercase text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-lg">
+                        <div class="flex gap-2"> 
+                            <button onclick="generatePrintPlan()" class="bg-white text-black px-8 py-3 rounded-2xl font-black uppercase text-sm hover:bg-gray-200 transition-all flex items-center gap-2 shadow-lg">
                                 Print Plan
                             </button>
                         </div>
@@ -673,8 +636,8 @@
                             </button>
                             <button onclick="state.currentActivityIndex=Math.min(state.activities.length, state.currentActivityIndex+1);state.elapsedSeconds=0;render();" class="p-5 bg-gray-900 rounded-full text-white/30 hover:text-white transition-colors"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg></button>
                         </div>
-                        <div class="flex-1 text-right">
-                             <button onclick="pauseTimer();state.mode='setup';render();" class="bg-gray-900 px-6 py-4 rounded-3xl text-[10px] uppercase font-black tracking-widest border border-white/5 hover:bg-red-950 transition-colors">Exit Session</button>
+                        <div class="flex-1 text-right"> 
+                            <button onclick="pauseTimer();state.mode='setup';render();" class="bg-gray-900 px-6 py-4 rounded-3xl text-[10px] uppercase font-black tracking-widest border border-white/5 hover:bg-red-950 transition-colors">Exit Session</button>
                         </div>
                     </div>
                 </div>
@@ -725,10 +688,10 @@
             let activities = [];
             if (type === 'comp-warmup') {
                 activities = [
-                    { title: 'Dynamic Warm-up', duration: 10, category: 'Neutral' },
-                    { title: 'Stance & Motion', duration: 5, category: 'Neutral' },
-                    { title: 'Hard Speed Shots', duration: 5, category: 'Neutral' },
-                    { title: 'Clearance Drills', duration: 5, category: 'Neutral' },
+                    { title: 'Dynamic Warm-up', duration: 10, category: 'Neutral / Offense' },
+                    { title: 'Stance & Motion', duration: 5, category: 'Neutral / Offense' },
+                    { title: 'Hard Speed Shots', duration: 5, category: 'Neutral / Offense' },
+                    { title: 'Clearance Drills', duration: 5, category: 'Neutral / Offense' },
                     { title: 'Mental Prep / Chalk Talk', duration: 5, category: 'Specials' }
                 ];
             } else if (type === 'comp-cooldown') {
