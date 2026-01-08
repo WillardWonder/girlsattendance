@@ -63,6 +63,7 @@ const DEFAULT_TECH_FOCUS = [
     "Scramble Situations"
 ];
 
+// Deduplicated list - Removed the second "Relentless"
 const MASTER_AFFIRMATIONS = [
     "Resilient", "Relentless", "Respectful", "Grateful", "Composed", 
     "Consistent", "Disciplined", "Fearless", "Strong", "Capable", 
@@ -71,7 +72,7 @@ const MASTER_AFFIRMATIONS = [
     "Warrior", "Champion", "Tenacious", "Bold", "Fierce", 
     "Determined", "Hungry", "Coachable", "Accountable", "Positive",
     "Adaptable", "Present", "Confident", "Aggressive", "Smart",
-    "Strategic", "Dominant", "Relentless", "Unbreakable", "Steady",
+    "Strategic", "Dominant", "Unbreakable", "Steady",
     "Powerful", "Quick", "Technical", "Fluid", "Decisive"
 ];
 
@@ -163,7 +164,7 @@ const App = () => {
   const [libFilterTag, setLibFilterTag] = useState('All');
   const [libShowFavorites, setLibShowFavorites] = useState(false);
 
-  // --- TAB 2: MATCH DAY STATE (Existing) ---
+  // --- TAB 2: MATCH DAY STATE ---
   const [matchComplete, setMatchComplete] = useState(false);
   const [matchEvent, setMatchEvent] = useState('');
   const [matchOpponent, setMatchOpponent] = useState('');
@@ -171,25 +172,25 @@ const App = () => {
   const [matchWell, setMatchWell] = useState('');
   const [matchLearn, setMatchLearn] = useState('');
 
-  // --- TAB 3: WEEKLY CHECK-IN STATE (Existing) ---
+  // --- TAB 3: WEEKLY CHECK-IN STATE ---
   const [weeklyComplete, setWeeklyComplete] = useState(false);
   const [weeklyAcademic, setWeeklyAcademic] = useState('No');
   const [weeklyWeight, setWeeklyWeight] = useState('Yes');
   const [weeklyRecovery, setWeeklyRecovery] = useState(5);
   const [weeklyGoal, setWeeklyGoal] = useState('');
   
-  // --- TAB 4: FOUNDATION STATE (Existing) ---
+  // --- TAB 4: FOUNDATION STATE ---
   const [foundationLocked, setFoundationLocked] = useState(true);
   const [identityWords, setIdentityWords] = useState(['', '', '', '', '']);
   const [whyLevels, setWhyLevels] = useState(['', '', '']); 
   const [purposeStatement, setPurposeStatement] = useState('');
 
-  // --- TAB 5: CONFIDENCE BANK (Existing) ---
+  // --- TAB 5: CONFIDENCE BANK ---
   const [confidenceDeposits, setConfidenceDeposits] = useState<any[]>([]);
   const [studentHistory, setStudentHistory] = useState<any[]>([]);
 
   // --- ADMIN STATE ---
-  const [adminTab, setAdminTab] = useState('dashboard'); // dashboard, roster, plan, content, history
+  const [adminTab, setAdminTab] = useState('dashboard'); 
   const [todaysAttendance, setTodaysAttendance] = useState<any[]>([]);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyStats, setHistoryStats] = useState<any[]>([]);
@@ -286,7 +287,6 @@ const App = () => {
   }
 
   // --- DATA LOADING & EFFECTS ---
-  // Load Coach Settings
   useEffect(() => {
     const fetchCoachSettings = async () => {
         const docRef = doc(db, "coach_settings", "weekly_plan");
@@ -323,13 +323,11 @@ const App = () => {
 
   const loadStudentStats = async (uid: string) => {
     try {
-      // Fetch recent daily logs for streak calculation
       const q = query(collection(db, "daily_logs"), where("uid", "==", uid), limit(30));
       const snap = await getDocs(q);
       const history = snap.docs.map(d => d.data()).sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
       setStudentHistory(history);
       
-      // Calculate Streak (consecutive days)
       let currentStreak = 0;
       if (history.length > 0) {
         const today = new Date().toLocaleDateString();
@@ -338,7 +336,7 @@ const App = () => {
         if (latest === today || latest === yesterday) {
             currentStreak = 1;
              for (let i = 0; i < history.length - 1; i++) {
-                currentStreak++; // Simple counting for now
+                currentStreak++; 
              }
         }
       }
@@ -442,14 +440,12 @@ const App = () => {
         await addDoc(collection(db, "attendance"), attendanceData);
         syncToSheets(logData);
 
-        // Determine specific micro-prompt based on data
         let prompt = "Great consistency.";
         if (dailyHabits.sleep === '<6' || dailyHabits.sleep === '6–7') prompt = "Sleep is your weapon. Aim for 30m earlier tonight.";
         else if (dailyPractice.effortLive > 4) prompt = "High effort today. Hydrate well tonight.";
         else if (dailyMindset.attemptedShot === 'No') prompt = "Visualize hitting your main shot 5 times before bed.";
         setMicroPrompt(prompt);
 
-        // Pick a random educational tip
         const randomFact = ROTATING_TIPS[Math.floor(Math.random() * ROTATING_TIPS.length)];
         setRandomTip(randomFact);
         
@@ -1194,12 +1190,22 @@ const App = () => {
                             </div>
                          </div>
 
-                        {/* Mantra - SCROLLABLE GRID */}
+                        {/* Mantra - Word Cloud */}
                         <div>
-                             <label className="text-gray-400 text-xs font-bold uppercase block mb-3">Today's Mantra (Scroll for more)</label>
-                             <div className="h-32 overflow-y-auto grid grid-cols-2 gap-2 pr-1 custom-scrollbar">
+                             <label className="text-gray-400 text-xs font-bold uppercase block mb-3">Today's Mantra</label>
+                             <div className="h-48 overflow-y-auto flex flex-wrap gap-2 p-4 border border-gray-700 rounded-xl bg-gray-900/30 custom-scrollbar content-start">
                                 {MASTER_AFFIRMATIONS.map(m => (
-                                    <button key={m} onClick={() => setDailyMindset({...dailyMindset, mantra: m})} className={`px-3 py-2 rounded-lg text-xs font-bold border text-left truncate transition-colors ${dailyMindset.mantra === m ? 'bg-blue-600 border-blue-500 text-white' : 'bg-gray-900 border-gray-700 text-gray-400'}`}>{m}</button>
+                                    <button 
+                                        key={m} 
+                                        onClick={() => setDailyMindset({...dailyMindset, mantra: m})} 
+                                        className={`px-3 py-1.5 rounded-full text-xs font-bold border transition-all transform hover:scale-105 ${
+                                            dailyMindset.mantra === m 
+                                            ? 'bg-pink-600 border-pink-500 text-white shadow-lg scale-105' 
+                                            : 'bg-gray-950 border-gray-700 text-gray-300 hover:bg-gray-800 hover:text-white'
+                                        }`}
+                                    >
+                                        {m}
+                                    </button>
                                 ))}
                             </div>
                         </div>
