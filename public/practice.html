@@ -53,19 +53,31 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // --- FIREBASE CONFIGURATION (Environment Aware) ---
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // --- FIREBASE CONFIGURATION (Girls Wrestling App) ---
+        const firebaseConfig = {
+            apiKey: "AIzaSyCpaaZZaHAumlUxbshd2GVH9yIoZrszg9I",
+            authDomain: "girls-wrestling-attendance.firebaseapp.com",
+            projectId: "girls-wrestling-attendance",
+            storageBucket: "girls-wrestling-attendance.firebasestorage.app",
+            messagingSenderId: "509878173460",
+            appId: "1:509878173460:web:d8d0133cbc5718ce9fcc01",
+            measurementId: "G-CVY2FGY8L2"
+        };
+
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
+        
+        // Use Global App ID if present, otherwise default
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
         // Make DB available globally
         window.db = db;
         window.addDoc = addDoc;
+        window.setDoc = setDoc;
         window.getDocs = getDocs;
         window.deleteDoc = deleteDoc;
         window.doc = doc;
@@ -75,21 +87,27 @@
         window.currentUser = null;
 
         // --- Auth Logic ---
-        // Expose initAuth globally
-        window.initAuth = async function() {
-            if (window.currentUser) {
-                window.dispatchEvent(new Event('auth-change'));
-                return; 
-            }
+        window.performEmailLogin = async function(email, password, isRegister) {
             try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
+                let userCredential;
+                if (isRegister) {
+                    userCredential = await createUserWithEmailAndPassword(auth, email, password);
+                    // Create basic profile for new users
+                    const user = userCredential.user;
+                    const namePart = email.split('@')[0];
+                    let fName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+                    await setDoc(doc(db, "user_profiles", user.uid), { 
+                        email: email, 
+                        First_Name: fName, 
+                        joined: new Date().toISOString()
+                    });
                 } else {
-                    await signInAnonymously(auth);
+                    userCredential = await signInWithEmailAndPassword(auth, email, password);
                 }
+                return { success: true, user: userCredential.user };
             } catch (error) {
                 console.error("Auth failed", error);
-                alert("Connection failed: " + error.message);
+                return { success: false, error: error.message };
             }
         };
 
@@ -98,9 +116,6 @@
             window.currentUser = user;
             window.dispatchEvent(new Event('auth-change'));
         });
-
-        // Initial attempt
-        window.initAuth();
     </script>
 
     <script>
@@ -191,7 +206,13 @@
             isLoadingHistory: false,
             showLoginModal: false,
             showAccountModal: false,
-            pendingAction: null // 'history' or 'save'
+            pendingAction: null, // 'history' or 'save'
+            // Auth Form State
+            authEmail: '',
+            authPass: '',
+            authIsRegister: false,
+            authError: '',
+            authLoading: false
         };
 
         const STORAGE_KEY = 'wrestling-system-v5';
@@ -391,16 +412,22 @@
             }
         }
 
-        async function performLogin() {
-            const btn = document.querySelector('button[onclick="performLogin()"]');
-            if(btn) btn.innerHTML = "Connecting...";
+        async function handleLoginSubmit(e) {
+            e.preventDefault();
+            state.authLoading = true;
+            state.authError = '';
+            render(); // update UI to show loading
+
+            const result = await window.performEmailLogin(state.authEmail, state.authPass, state.authIsRegister);
             
-            try {
-                await window.initAuth();
-            } catch (e) {
-                showMessage('Connection failed. Try again.', 'error');
-                if(btn) btn.innerHTML = "Retry Connection";
+            state.authLoading = false;
+            if (!result.success) {
+                state.authError = result.error;
+            } else {
+                state.showLoginModal = false;
+                // Pending actions handled by listener
             }
+            render();
         }
 
         async function uploadToCalendar() {
@@ -560,16 +587,42 @@
         function renderLoginModal() {
             return `
                 <div class="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-                    <div class="bg-gray-800 rounded-3xl border-2 border-blue-500 w-full max-w-md p-8 text-center shadow-2xl">
-                        <h3 class="text-2xl font-black uppercase italic text-blue-400 mb-4">Cloud Connection Required</h3>
-                        <p class="text-gray-400 mb-8">To save history and upload plans, you need to connect to the team database.</p>
+                    <div class="bg-gray-800 rounded-3xl border-2 border-pink-500 w-full max-w-md p-8 text-center shadow-2xl relative">
+                        <button onclick="state.showLoginModal=false;render();" class="absolute top-4 right-4 text-gray-500 hover:text-white">✕</button>
                         
-                        <button onclick="performLogin()" class="w-full py-4 bg-blue-600 hover:bg-blue-500 rounded-xl font-black uppercase text-white shadow-lg transition-all mb-4">
-                            Connect Now
-                        </button>
-                        <button onclick="state.showLoginModal=false;render();" class="text-gray-500 hover:text-white uppercase text-xs font-bold tracking-widest">
-                            Continue Offline
-                        </button>
+                        <div class="text-center mb-6">
+                            <h3 class="text-2xl font-black uppercase italic text-white mb-2">Team Access</h3>
+                            <p class="text-gray-400 text-xs">Save plans and track history</p>
+                        </div>
+
+                        <form onsubmit="handleLoginSubmit(event)" class="space-y-4 text-left">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Email</label>
+                                <input required type="email" value="${state.authEmail}" oninput="state.authEmail=this.value" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-pink-500 outline-none" placeholder="coach@example.com">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Password</label>
+                                <input required type="password" value="${state.authPass}" oninput="state.authPass=this.value" class="w-full bg-gray-900 border border-gray-700 rounded-lg p-3 text-white focus:border-pink-500 outline-none" placeholder="••••••">
+                            </div>
+
+                            ${state.authError ? `<div class="text-red-400 text-xs p-2 bg-red-900/20 rounded text-center">${state.authError}</div>` : ''}
+
+                            <button type="submit" ${state.authLoading ? 'disabled' : ''} class="w-full py-4 bg-pink-600 hover:bg-pink-500 rounded-xl font-black uppercase text-white shadow-lg transition-all disabled:opacity-50">
+                                ${state.authLoading ? 'Processing...' : (state.authIsRegister ? 'Create Account' : 'Sign In')}
+                            </button>
+                        </form>
+
+                        <div class="mt-6 text-xs text-gray-500">
+                            <button onclick="state.authIsRegister=!state.authIsRegister;state.authError='';render();" class="text-pink-400 hover:text-white font-bold underline">
+                                ${state.authIsRegister ? 'Have an account? Sign In' : 'Need an account? Sign Up'}
+                            </button>
+                        </div>
+                        
+                        <div class="mt-4 pt-4 border-t border-gray-700">
+                            <button onclick="state.showLoginModal=false;render();" class="text-gray-500 hover:text-white uppercase text-[10px] font-bold tracking-widest">
+                                Continue Offline
+                            </button>
+                        </div>
                     </div>
                 </div>
             `;
@@ -577,16 +630,18 @@
 
         function renderAccountModal() {
             const uid = window.currentUser ? window.currentUser.uid.substring(0, 8) + '...' : 'Unknown';
+            const email = window.currentUser ? window.currentUser.email : 'No Email';
             return `
                 <div class="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                     <div class="bg-gray-800 rounded-3xl border-2 border-green-500 w-full max-w-md p-8 text-center shadow-2xl">
                         <h3 class="text-2xl font-black uppercase italic text-green-400 mb-2">Account Verified</h3>
                         <div class="bg-gray-900 p-4 rounded-xl border border-white/10 mb-6">
-                            <div class="text-xs uppercase text-gray-500 font-bold mb-1">User ID</div>
-                            <div class="font-mono text-white text-lg">${uid}</div>
+                            <div class="text-xs uppercase text-gray-500 font-bold mb-1">Logged In As</div>
+                            <div class="font-bold text-white text-lg mb-1">${email}</div>
+                            <div class="font-mono text-xs text-gray-600">ID: ${uid}</div>
                             <div class="text-[10px] text-green-500 uppercase font-bold mt-2">● Connected Securely</div>
                         </div>
-                        <p class="text-gray-400 text-sm mb-8">You are logged in. Load your practice history?</p>
+                        <p class="text-gray-400 text-sm mb-8">Load your practice history?</p>
                         
                         <button onclick="confirmAccountAndFetch()" class="w-full py-4 bg-green-600 hover:bg-green-500 rounded-xl font-black uppercase text-white shadow-lg transition-all mb-4">
                             Confirm & Load History
