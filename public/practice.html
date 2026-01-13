@@ -212,6 +212,7 @@
             stationEditId: null,
             showSplitSelector: false,
             tempRotationCount: 1, 
+            liveInterval: 0, // NEW: 0=Off, 15, 30, 60
             history: [],
             showHistory: false,
             isLoadingHistory: false,
@@ -227,6 +228,10 @@
 
         const STORAGE_KEY = 'wrestling-system-v5'; // Custom library
         const SESSION_KEY = 'wrestling-active-session-v2'; // Active session persistence
+
+        // --- GLOBAL VARIABLES FOR FIXES ---
+        let audioCtx = null;
+        let wakeLock = null;
 
         // --- PERSISTENCE LOGIC ---
         function saveActiveSession() {
@@ -290,20 +295,46 @@
         });
 
         // --- Utilities ---
+        
+        // FIX 2: Wake Lock API
+        async function requestWakeLock() {
+            if ('wakeLock' in navigator) {
+                try {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Screen Wake Lock active');
+                } catch (err) {
+                    console.error(`Wake Lock Error: ${err.name}, ${err.message}`);
+                }
+            }
+        }
+
+        // FIX 3: Global Audio Context Init
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        }
+
         function playWhistle() {
             if (!state.options.enableWhistle) return;
+            initAudio(); // Ensure context is ready/resumed
             try {
-                const ctx = new (window.AudioContext || window.webkitAudioContext)();
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.connect(gain); gain.connect(ctx.destination);
-                osc.type = 'square'; osc.frequency.setValueAtTime(900, ctx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(1300, ctx.currentTime + 0.1);
-                gain.gain.setValueAtTime(0, ctx.currentTime);
-                gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.05);
-                gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.4);
-                osc.start(); osc.stop(ctx.currentTime + 0.4);
-            } catch (e) {}
+                // Use global audioCtx
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'square'; osc.frequency.setValueAtTime(900, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1300, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0, audioCtx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.3, audioCtx.currentTime + 0.05);
+                gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.4);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            } catch (e) {
+                console.error("Whistle error", e);
+            }
         }
 
         function speak(text) {
@@ -340,6 +371,8 @@
 
         // --- Logic ---
         async function startPractice() {
+            initAudio(); // Fix 3: Init Audio on interaction
+            requestWakeLock(); // Fix 2: Keep screen awake
             savePracticePlan(false); // Autosave (silent)
             state.mode = 'live';
             state.currentActivityIndex = 0;
@@ -357,7 +390,14 @@
             state.elapsedSeconds = 0;
             state.practiceName = '';
             state.currentPlanId = null;
+            state.liveInterval = 0; // Reset interval
             clearActiveSession(); // Clear storage on explicit exit
+            
+            // Release wake lock if it exists
+            if(wakeLock) {
+                wakeLock.release().then(() => { wakeLock = null; });
+            }
+            
             render();
         }
 
@@ -560,12 +600,14 @@
             if (plan) {
                 state.activities = plan.activities || [];
                 state.practiceName = plan.name || ''; // Load name
-                state.practiceDate = plan.date || state.practiceDate;
-                // Set currentPlanId so subsequent saves update this plan
-                state.currentPlanId = id; 
+                
+                // FIX 1: Prevent History Overwrite
+                state.practiceDate = new Date().toISOString().split('T')[0]; // Reset date to today
+                state.currentPlanId = null; // Clear ID so it saves as new
+                
                 state.setupStep = 'schedule';
                 state.showHistory = false;
-                showMessage('Plan loaded successfully!', 'success');
+                showMessage('Plan loaded as template! (Saved as new)', 'success');
                 render();
             }
         }
@@ -641,6 +683,22 @@
             }
         }
 
+        function adjustLiveTime(minutes) {
+            if (!state.activities[state.currentActivityIndex]) return;
+            const act = state.activities[state.currentActivityIndex];
+            
+            const newDuration = Math.max(1, act.duration + minutes);
+            // Safety check: Don't reduce time below elapsed time
+            if (newDuration * 60 < state.elapsedSeconds) {
+                showMessage("Cannot reduce time below current elapsed!", "error");
+                return;
+            }
+            
+            act.duration = newDuration;
+            saveActiveSession(); // Save changes
+            render();
+        }
+
         function startTimer() {
             if (state.intervalId) return;
             const cur = state.activities[state.currentActivityIndex];
@@ -652,6 +710,11 @@
             state.intervalId = setInterval(() => {
                 state.elapsedSeconds++;
                 
+                // --- INTERVAL WHISTLE (SHARK BAIT) ---
+                if (state.liveInterval > 0 && state.elapsedSeconds > 0 && state.elapsedSeconds % state.liveInterval === 0) {
+                    playWhistle();
+                }
+
                 // --- SAVE PROGRESS EVERY 5 SECONDS ---
                 if (state.elapsedSeconds % 5 === 0) {
                     saveActiveSession();
@@ -1260,7 +1323,28 @@
 
                     <div class="flex-1 flex flex-col items-center justify-center text-center">
                         ${liveContent}
+                        <!-- Time Adjustments -->
+                        ${!isDone ? `
+                            <div class="flex gap-4 mt-6">
+                                <button onclick="adjustLiveTime(-1)" class="px-6 py-3 rounded-xl border border-white/10 bg-gray-900 hover:bg-red-900/50 text-white font-bold transition-all">-1m</button>
+                                <button onclick="adjustLiveTime(1)" class="px-6 py-3 rounded-xl border border-white/10 bg-gray-900 hover:bg-green-900/50 text-white font-bold transition-all">+1m</button>
+                            </div>
+                        ` : ''}
                     </div>
+
+                    <!-- Shark Bait Control -->
+                    ${!isDone ? `
+                        <div class="flex justify-center mb-2">
+                            <div class="bg-gray-900/80 rounded-xl border border-white/5 p-2 flex items-center gap-2">
+                                <span class="text-[10px] uppercase font-bold text-gray-500 px-2">Shark Bait Interval</span>
+                                ${[0, 15, 30, 60].map(val => `
+                                    <button onclick="state.liveInterval=${val};render();" class="px-3 py-1 rounded-lg text-xs font-bold transition-colors ${state.liveInterval === val ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}">
+                                        ${val === 0 ? 'OFF' : val + 's'}
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
 
                     <div class="bg-gray-950 p-6 rounded-[4rem] border-t-2 border-white/5 shrink-0 flex items-center justify-between px-10">
                         <div class="flex-1">
