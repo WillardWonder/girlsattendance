@@ -17,6 +17,13 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #3b82f6; border-radius: 10px; }
         .animate-pulse-fast { animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 
+        /* Make calendar and clock icons white in dark mode */
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="time"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            cursor: pointer;
+        }
+
         /* Print Specific Styles */
         @media print {
             .no-print { display: none !important; }
@@ -53,7 +60,7 @@
     <!-- Firebase SDKs -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, serverTimestamp, setDoc, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
         // --- FIREBASE CONFIGURATION (Girls Wrestling App) ---
@@ -82,6 +89,7 @@
         window.deleteDoc = deleteDoc;
         window.doc = doc;
         window.collection = collection;
+        window.writeBatch = writeBatch;
         window.serverTimestamp = serverTimestamp;
         window.appId = appId;
         window.currentUser = null;
@@ -185,6 +193,8 @@
         let state = {
             mode: 'setup', 
             setupStep: 'details', 
+            currentPlanId: null, // TRACK FIRESTORE DOC ID
+            practiceName: '',    // OPTIONAL NAME
             practiceDate: new Date().toISOString().split('T')[0],
             startTime: '15:30',
             endTime: '17:00',
@@ -201,13 +211,13 @@
             showCustomForm: false,
             stationEditId: null,
             showSplitSelector: false,
+            tempRotationCount: 1, 
             history: [],
             showHistory: false,
             isLoadingHistory: false,
             showLoginModal: false,
             showAccountModal: false,
-            pendingAction: null, // 'history' or 'save'
-            // Auth Form State
+            pendingAction: null, 
             authEmail: '',
             authPass: '',
             authIsRegister: false,
@@ -215,24 +225,64 @@
             authLoading: false
         };
 
-        const STORAGE_KEY = 'wrestling-system-v5';
+        const STORAGE_KEY = 'wrestling-system-v5'; // Custom library
+        const SESSION_KEY = 'wrestling-active-session-v2'; // Active session persistence
+
+        // --- PERSISTENCE LOGIC ---
+        function saveActiveSession() {
+            // Create a safe copy of state to save (excluding non-serializable stuff)
+            const stateToSave = {
+                ...state,
+                intervalId: null, // Don't save the timer ID
+                isRunning: false, // Always save as paused so it doesn't auto-start on reload
+                showLoginModal: false, // Don't reopen modals automatically
+                showAccountModal: false
+            };
+            localStorage.setItem(SESSION_KEY, JSON.stringify(stateToSave));
+        }
+
+        function clearActiveSession() {
+            localStorage.removeItem(SESSION_KEY);
+        }
+
+        function restoreActiveSession() {
+            const saved = localStorage.getItem(SESSION_KEY);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    // Merge saved state
+                    state = { ...state, ...parsed };
+                    
+                    // Ensure timer is stopped
+                    state.intervalId = null;
+                    state.isRunning = false;
+                    
+                    console.log("Session restored from local storage");
+                    render();
+                } catch(e) {
+                    console.error("Error restoring session", e);
+                }
+            }
+        }
 
         // --- AUTH & EVENT HANDLING ---
         window.addEventListener('auth-change', () => {
             if (window.currentUser) {
-                // If logged in, close LOGIN modal (not account modal)
                 state.showLoginModal = false;
-                
-                // If we were waiting to open history, now open ACCOUNT confirmation
+                fetchLibraryFromCloud();
+
                 if (state.pendingAction === 'history') {
                     state.pendingAction = null;
-                    state.showAccountModal = true; // Ask for confirmation first
+                    state.showAccountModal = true; 
                     render();
                 } else if (state.pendingAction === 'save') {
                     state.pendingAction = null;
-                    savePracticePlan(); // Auto-save if intent was save
+                    savePracticePlan(); 
+                } else if (state.pendingAction === 'syncLib') {
+                    state.pendingAction = null;
+                    syncLibraryToCloud();
                 } else {
-                    render(); // Update UI
+                    render(); 
                 }
             } else {
                 render();
@@ -290,18 +340,28 @@
 
         // --- Logic ---
         async function startPractice() {
-            // 1. Save to Firebase (Autosave)
-            savePracticePlan(false);
-
-            // 2. Start the Timer UI
+            savePracticePlan(false); // Autosave (silent)
             state.mode = 'live';
             state.currentActivityIndex = 0;
             state.elapsedSeconds = 0;
-            render();
+            render(); // Trigger save via render
             startTimer();
         }
 
-        // Separate Save Function
+        function exitSession() {
+            if(!confirm("Are you sure you want to exit? Current progress will be lost. (Unless you saved the plan)")) return;
+            pauseTimer();
+            state.mode = 'setup';
+            state.activities = [];
+            state.currentActivityIndex = 0;
+            state.elapsedSeconds = 0;
+            state.practiceName = '';
+            state.currentPlanId = null;
+            clearActiveSession(); // Clear storage on explicit exit
+            render();
+        }
+
+        // UPDATED SAVE FUNCTION: Handles Upsert (Update or Insert)
         async function savePracticePlan(showAlert = true) {
             if (!window.currentUser) {
                 if (showAlert) {
@@ -317,19 +377,32 @@
                 if(btn && showAlert) { btn.innerText = "Saving..."; btn.disabled = true; }
                 
                 try {
-                    // Save to user's private collection
                     const path = window.collection(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "practice_plans");
-                    await window.addDoc(path, {
+                    
+                    const planData = {
+                        name: state.practiceName,
                         date: state.practiceDate,
                         startTime: state.startTime,
                         endTime: state.endTime,
                         activities: state.activities,
                         totalDuration: getTotalDuration(),
                         timestamp: window.serverTimestamp(),
-                        createdAt: new Date().toISOString()
-                    });
-                    if (showAlert) showMessage('Practice Plan Saved to History!', 'success');
-                    else console.log('Autosaved plan.');
+                    };
+
+                    if (state.currentPlanId) {
+                        // UPDATE EXISTING
+                        const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "practice_plans", state.currentPlanId);
+                        await window.setDoc(docRef, { ...planData, updatedAt: new Date().toISOString() }, { merge: true });
+                        if (showAlert) showMessage('Practice Plan Updated!', 'success');
+                    } else {
+                        // CREATE NEW
+                        planData.createdAt = new Date().toISOString();
+                        const docRef = await window.addDoc(path, planData);
+                        state.currentPlanId = docRef.id; // Store ID to prevent duplicates on next save
+                        if (showAlert) showMessage('Practice Plan Saved!', 'success');
+                    }
+
+                    if (!showAlert) console.log('Autosaved plan.');
                 } catch (err) {
                     console.error("Firebase Save Error", err);
                     if (showAlert) showMessage('Save Failed', 'error');
@@ -339,24 +412,120 @@
             }
         }
 
-        // --- History Logic ---
-        
-        // 1. Click History -> Check Auth
+        async function syncLibraryToCloud() {
+            if (!window.currentUser) {
+                state.pendingAction = 'syncLib';
+                state.showLoginModal = true;
+                render();
+                return;
+            }
+
+            const btn = document.getElementById('sync-btn');
+            if(btn) { btn.innerText = "Syncing..."; btn.disabled = true; }
+
+            try {
+                const batch = window.writeBatch(window.db);
+                const allDrills = [...presetActivities, ...state.customActivities];
+                
+                allDrills.forEach(drill => {
+                    const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", drill.id);
+                    batch.set(docRef, drill, { merge: true });
+                });
+
+                await batch.commit();
+                showMessage('Library synced to cloud successfully!', 'success');
+            } catch (e) {
+                console.error(e);
+                showMessage('Sync failed: ' + e.message, 'error');
+            } finally {
+                if(btn) { btn.innerText = "Sync to Cloud"; btn.disabled = false; }
+            }
+        }
+
+        async function addCustomDrill() {
+            const t = document.getElementById('c-title').value;
+            const d = parseInt(document.getElementById('c-dur').value) || 5;
+            const c = document.getElementById('c-cat').value;
+            if (t) {
+                const newDrill = { id: 'c'+Date.now(), title: t, duration: d, category: c };
+                state.customActivities.push(newDrill);
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customActivities));
+                
+                if (window.currentUser) {
+                    try {
+                        const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", newDrill.id);
+                        await window.setDoc(docRef, newDrill);
+                        showMessage('Saved to Cloud Library', 'success');
+                    } catch(e) {
+                        console.error("Cloud save error", e);
+                        showMessage('Saved locally. Cloud error.', 'error');
+                    }
+                }
+
+                state.showCustomForm = false; 
+                render();
+            }
+        }
+
+        async function fetchLibraryFromCloud() {
+            if (!window.currentUser) return;
+            try {
+                const libRef = window.collection(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library");
+                const snap = await window.getDocs(libRef);
+                if (!snap.empty) {
+                    const remoteDrills = [];
+                    snap.forEach(doc => remoteDrills.push(doc.data()));
+                    state.customActivities = remoteDrills;
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customActivities));
+                    render();
+                    console.log("Drill library synced from cloud");
+                }
+            } catch (e) {
+                console.error("Fetch library failed", e);
+            }
+        }
+
+        async function pushPresetsToCloud() {
+            if (!window.currentUser) {
+                showMessage("Login required to sync presets", "error");
+                return;
+            }
+            if(!confirm("This will add all default system drills to your cloud library. Continue?")) return;
+
+            const btn = document.getElementById('push-presets-btn');
+            if(btn) { btn.innerText = "Pushing..."; btn.disabled = true; }
+
+            try {
+                const batch = window.writeBatch(window.db);
+                let count = 0;
+                presetActivities.forEach(drill => {
+                    const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", drill.id);
+                    batch.set(docRef, drill);
+                    count++;
+                });
+                await batch.commit();
+                showMessage(`${count} presets added to cloud!`, 'success');
+                fetchLibraryFromCloud(); 
+            } catch (e) {
+                console.error("Batch push error", e);
+                showMessage("Sync failed: " + e.message, "error");
+            } finally {
+                if(btn) { btn.innerText = "Push Presets to Cloud"; btn.disabled = false; }
+            }
+        }
+
         function handleHistoryClick() {
             if (!window.currentUser) {
                 state.pendingAction = 'history';
                 state.showLoginModal = true;
             } else {
-                state.showAccountModal = true; // Show verification popup first
+                state.showAccountModal = true; 
             }
             render();
         }
 
-        // 2. Confirm Account -> Fetch History
         async function confirmAccountAndFetch() {
             state.showAccountModal = false;
-            
-            // Check if DB is ready
             if(!window.getDocs) {
                 showMessage("Database initializing...", "info");
                 setTimeout(fetchHistoryActual, 1000);
@@ -375,7 +544,6 @@
                 const snapshot = await window.getDocs(path);
                 const plans = [];
                 snapshot.forEach(doc => plans.push({ id: doc.id, ...doc.data() }));
-                // Sort by timestamp desc (newest first)
                 plans.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
                 state.history = plans;
             } catch (e) {
@@ -391,6 +559,10 @@
             const plan = state.history.find(p => p.id === id);
             if (plan) {
                 state.activities = plan.activities || [];
+                state.practiceName = plan.name || ''; // Load name
+                state.practiceDate = plan.date || state.practiceDate;
+                // Set currentPlanId so subsequent saves update this plan
+                state.currentPlanId = id; 
                 state.setupStep = 'schedule';
                 state.showHistory = false;
                 showMessage('Plan loaded successfully!', 'success');
@@ -416,7 +588,7 @@
             e.preventDefault();
             state.authLoading = true;
             state.authError = '';
-            render(); // update UI to show loading
+            render(); 
 
             const result = await window.performEmailLogin(state.authEmail, state.authPass, state.authIsRegister);
             
@@ -425,7 +597,6 @@
                 state.authError = result.error;
             } else {
                 state.showLoginModal = false;
-                // Pending actions handled by listener
             }
             render();
         }
@@ -434,7 +605,6 @@
             const btn = document.getElementById('cal-upload-btn');
             if(btn) { btn.innerText = "Uploading..."; btn.disabled = true; }
             
-            // 1. Format Description
             const description = `FOCUS: Wrestling Practice\n\nAGENDA:\n` + 
                 state.activities.map((item, i) => {
                     let noteText = item.notes ? ` (Note: ${item.notes})` : '';
@@ -442,7 +612,6 @@
                     return `- [${item.duration}m] ${item.title.toUpperCase()} (${item.category})${noteText}`;
                 }).join('\n');
 
-            // 2. Construct Payload
             const startDateTime = new Date(`${state.practiceDate}T${state.startTime}`).toISOString();
             const endDateTime = new Date(`${state.practiceDate}T${state.endTime}`).toISOString();
 
@@ -482,6 +651,12 @@
             state.isRunning = true;
             state.intervalId = setInterval(() => {
                 state.elapsedSeconds++;
+                
+                // --- SAVE PROGRESS EVERY 5 SECONDS ---
+                if (state.elapsedSeconds % 5 === 0) {
+                    saveActiveSession();
+                }
+
                 const cur = state.activities[state.currentActivityIndex];
                 if (cur && state.elapsedSeconds >= cur.duration * 60) {
                     playWhistle();
@@ -504,7 +679,7 @@
             if (state.intervalId) clearInterval(state.intervalId);
             state.isRunning = false;
             state.intervalId = null;
-            render();
+            render(); // will save session
         }
 
         function duplicateDrill(idx) {
@@ -525,13 +700,14 @@
 
         function updateDrillNote(idx, note) {
             state.activities[idx].notes = note;
+            saveActiveSession(); // Save text input changes immediately might be too much? No, it's fine.
         }
 
         function generatePrintPlan() {
             const printArea = document.getElementById('print-area');
             let html = `
                 <div class="print-header">
-                    <h1 style="font-size: 28px; font-weight: 900; text-transform: uppercase; margin: 0;">Wrestling Practice Plan</h1>
+                    <h1 style="font-size: 28px; font-weight: 900; text-transform: uppercase; margin: 0;">${state.practiceName || 'Wrestling Practice Plan'}</h1>
                     <div style="display: flex; justify-content: space-between; margin-top: 10px; font-weight: bold;">
                         <span>Date: ${state.practiceDate || 'N/A'}</span>
                         <span>Time: ${state.startTime} - ${state.endTime}</span>
@@ -582,6 +758,11 @@
         function render() {
             const app = document.getElementById('app');
             app.innerHTML = state.mode === 'setup' ? renderSetup() : renderLive();
+            
+            // Auto-save on every render unless running (saved in timer)
+            if (state.mode !== 'live' || !state.isRunning) {
+                saveActiveSession();
+            }
         }
 
         function renderLoginModal() {
@@ -690,6 +871,7 @@
                         <div class="bg-gray-800 p-8 rounded-3xl border-2 border-blue-500 shadow-xl space-y-6">
                             <h2 class="text-2xl font-black uppercase text-blue-400">Session Info</h2>
                             <div class="space-y-4">
+                                <label class="block"><span class="text-xs font-bold uppercase opacity-50">Practice Name (Optional)</span><input oninput="state.practiceName=this.value" type="text" value="${state.practiceName}" placeholder="e.g. Pre-Regionals Hard Day" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 focus:border-blue-500 outline-none transition-all placeholder-gray-600" /></label>
                                 <label class="block"><span class="text-xs font-bold uppercase opacity-50">Date</span><input oninput="state.practiceDate=this.value" type="date" value="${state.practiceDate}" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 focus:border-blue-500 outline-none transition-all" /></label>
                                 <div class="grid grid-cols-2 gap-4">
                                     <label class="block"><span class="text-xs font-bold uppercase opacity-50">Start</span><input oninput="state.startTime=this.value" type="time" value="${state.startTime}" class="w-full bg-gray-900 border-2 border-gray-700 rounded-xl p-4 mt-1 outline-none" /></label>
@@ -724,19 +906,19 @@
                     <div class="bg-gray-800 p-8 rounded-3xl border-2 border-white/10 shadow-xl">
                         <h2 class="text-2xl font-black uppercase text-white italic mb-6">Start with a Template</h2>
                         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                            <button onclick="state.activities=[];showMessage('Empty practice created');state.setupStep='activities';render();" class="p-6 bg-gray-900 rounded-2xl border-2 border-blue-500/20 hover:border-blue-500 text-center transition-all group active:scale-95">
+                            <button onclick="state.activities=[];state.currentPlanId=null;state.practiceName='';showMessage('New empty practice created');state.setupStep='activities';render();" class="p-6 bg-gray-900 rounded-2xl border-2 border-blue-500/20 hover:border-blue-500 text-center transition-all group active:scale-95">
                                 <div class="text-blue-400 font-black mb-2 group-hover:scale-110 transition-transform">TEAM PRACTICE</div>
                                 <div class="text-[10px] opacity-40 uppercase font-bold tracking-widest">Manual Builder</div>
                             </button>
-                            <button onclick="state.showSplitSelector=true;render();" class="p-6 bg-gray-900 rounded-2xl border-2 border-yellow-500/20 hover:border-yellow-500 text-center transition-all group active:scale-95">
+                            <button onclick="state.currentPlanId=null;state.practiceName='';state.showSplitSelector=true;render();" class="p-6 bg-gray-900 rounded-2xl border-2 border-yellow-500/20 hover:border-yellow-500 text-center transition-all group active:scale-95">
                                 <div class="text-yellow-500 font-black mb-2 group-hover:scale-110 transition-transform">GROUP SPLIT</div>
                                 <div class="text-[10px] opacity-40 uppercase font-bold tracking-widest">Station Rotation</div>
                             </button>
-                            <button onclick="loadTemplate('comp-warmup')" class="p-6 bg-gray-900 rounded-2xl border-2 border-red-500/20 hover:border-red-500 text-center transition-all group active:scale-95">
+                            <button onclick="state.currentPlanId=null;state.practiceName='';loadTemplate('comp-warmup')" class="p-6 bg-gray-900 rounded-2xl border-2 border-red-500/20 hover:border-red-500 text-center transition-all group active:scale-95">
                                 <div class="text-red-500 font-black mb-2 group-hover:scale-110 transition-transform">COMP WARMUP</div>
                                 <div class="text-[10px] opacity-40 uppercase font-bold tracking-widest">High Intensity</div>
                             </button>
-                            <button onclick="loadTemplate('comp-cooldown')" class="p-6 bg-gray-900 rounded-2xl border-2 border-cyan-400/20 hover:border-cyan-400 text-center transition-all group active:scale-95">
+                            <button onclick="state.currentPlanId=null;state.practiceName='';loadTemplate('comp-cooldown')" class="p-6 bg-gray-900 rounded-2xl border-2 border-cyan-400/20 hover:border-cyan-400 text-center transition-all group active:scale-95">
                                 <div class="text-cyan-400 font-black mb-2 group-hover:scale-110 transition-transform">COMP COOLDOWN</div>
                                 <div class="text-[10px] opacity-40 uppercase font-bold tracking-widest">Recovery Flow</div>
                             </button>
@@ -765,9 +947,12 @@
 
             return `
                 <div class="space-y-8">
-                    <div class="flex justify-between items-center bg-gray-800 p-6 rounded-3xl border-2 border-blue-500">
+                    <div class="flex flex-col md:flex-row justify-between items-center bg-gray-800 p-6 rounded-3xl border-2 border-blue-500 gap-4">
                         <div><h2 class="text-2xl font-black uppercase text-blue-400 tracking-tighter">Drill Library</h2><p class="text-xs opacity-50">Tap cards to select</p></div>
-                        <button onclick="state.showCustomForm=!state.showCustomForm;render();" class="bg-blue-600 px-6 py-2 rounded-xl font-bold uppercase text-xs">New Custom Move</button>
+                        <div class="flex gap-2">
+                            ${window.currentUser ? `<button id="push-presets-btn" onclick="pushPresetsToCloud()" class="bg-gray-700 px-6 py-2 rounded-xl font-bold uppercase text-xs border border-white/10 hover:bg-gray-600 transition-colors">Push Presets to Cloud</button>` : ''}
+                            <button onclick="state.showCustomForm=!state.showCustomForm;render();" class="bg-blue-600 px-6 py-2 rounded-xl font-bold uppercase text-xs">New Custom Move</button>
+                        </div>
                     </div>
 
                     ${state.showCustomForm ? `
@@ -906,16 +1091,60 @@
             return `
                 <div class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/95 backdrop-blur-md">
                     <div class="bg-gray-800 rounded-[3rem] border-4 border-yellow-500 p-12 text-center space-y-8 shadow-[0_0_50px_rgba(234,179,8,0.3)]">
-                        <h3 class="text-4xl font-black uppercase italic text-yellow-500 tracking-tighter">How many groups?</h3>
-                        <div class="flex gap-4 justify-center">
-                            ${[2, 3, 4, 5, 6].map(num => `
-                                <button onclick="createGroupSplit(${num})" class="w-24 h-24 rounded-3xl bg-gray-900 border-2 border-white/10 hover:border-blue-500 hover:text-blue-400 text-4xl font-black transition-all hover:scale-110 shadow-xl hover:shadow-blue-500/20">${num}</button>
-                            `).join('')}
+                        <h3 class="text-4xl font-black uppercase italic text-yellow-500 tracking-tighter">Setup Stations</h3>
+                        
+                        <!-- Rotations Selector -->
+                        <div class="bg-gray-900/50 p-6 rounded-2xl border border-white/5">
+                            <label class="block text-xs font-bold uppercase text-gray-400 mb-4">Rotations (Drills per Group)</label>
+                            <div class="flex items-center justify-center gap-6">
+                                <button onclick="state.tempRotationCount = Math.max(1, state.tempRotationCount - 1); render();" class="w-16 h-16 rounded-2xl bg-gray-800 border border-gray-600 hover:bg-gray-700 text-3xl font-black text-white transition-all">-</button>
+                                <span class="text-6xl font-mono font-black text-blue-400 w-24">${state.tempRotationCount}</span>
+                                <button onclick="state.tempRotationCount = Math.min(10, state.tempRotationCount + 1); render();" class="w-16 h-16 rounded-2xl bg-gray-800 border border-gray-600 hover:bg-gray-700 text-3xl font-black text-white transition-all">+</button>
+                            </div>
                         </div>
-                        <button onclick="state.showSplitSelector=false;render();" class="text-xs uppercase font-black text-gray-600 hover:text-white transition-colors">Cancel Selection</button>
+
+                        <!-- Group Selector -->
+                        <div class="space-y-4">
+                            <div class="text-xs font-bold uppercase text-gray-400">Select Number of Groups to Create</div>
+                            <div class="flex gap-3 justify-center flex-wrap">
+                                ${[2, 3, 4, 5, 6].map(num => `
+                                    <button onclick="createGroupSplit(${num})" class="w-20 h-20 rounded-3xl bg-gray-900 border-2 border-white/10 hover:border-blue-500 hover:text-blue-400 text-3xl font-black transition-all hover:scale-110 shadow-xl hover:shadow-blue-500/20">${num}</button>
+                                `).join('')}
+                            </div>
+                        </div>
+                        
+                        <button onclick="state.showSplitSelector=false;state.tempRotationCount=1;render();" class="text-xs uppercase font-black text-gray-600 hover:text-white transition-colors">Cancel</button>
                     </div>
                 </div>
             `;
+        }
+
+        function createGroupSplit(numGroups) {
+            const rotations = state.tempRotationCount || 1;
+            
+            for (let r = 0; r < rotations; r++) {
+                const groups = [];
+                for(let i=0; i<numGroups; i++) {
+                    groups.push({ 
+                        title: `TAP TO ASSIGN`, 
+                        description: `Group ${String.fromCharCode(65+i)} - Drill ${r+1}`, 
+                        id: null 
+                    });
+                }
+                state.activities.push({ 
+                    type: 'station', 
+                    id: 'station'+Date.now()+'_'+r, 
+                    duration: 10, 
+                    groups: groups,
+                    notes: `Rotation ${r+1} of ${rotations}`
+                });
+            }
+            
+            state.showSplitSelector = false;
+            state.setupStep = 'schedule'; 
+            state.tempRotationCount = 1; // Reset
+            showMessage(`Created ${rotations} rotation blocks!`, 'success');
+            render();
         }
 
         function renderStationAssignModal() {
@@ -954,9 +1183,11 @@
 
                             ${state.history.map(plan => {
                                 const activitySummary = plan.activities.slice(0, 3).map(a => a.type === 'station' ? 'Stations' : a.title).join(', ') + (plan.activities.length > 3 ? ` + ${plan.activities.length - 3} more` : '');
+                                const planName = plan.name ? `<div class="text-white text-lg font-bold italic mb-1">"${plan.name}"</div>` : '';
                                 return `
                                     <div class="bg-gray-900 p-6 rounded-2xl border border-white/5 flex flex-col md:flex-row justify-between items-center gap-6 group hover:border-purple-500 transition-all">
                                         <div class="flex-1 text-center md:text-left">
+                                            ${planName}
                                             <div class="flex items-center justify-center md:justify-start gap-3 mb-1">
                                                 <div class="font-black text-xl uppercase text-white">${plan.date || 'Unknown Date'}</div>
                                                 <div class="text-xs font-bold px-2 py-1 bg-gray-800 rounded text-purple-400">${plan.totalDuration}m</div>
@@ -1044,7 +1275,7 @@
                             <button onclick="state.currentActivityIndex=Math.min(state.activities.length, state.currentActivityIndex+1);state.elapsedSeconds=0;render();" class="p-5 bg-gray-900 rounded-full text-white/30 hover:text-white transition-colors"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m13 17 5-5-5-5M6 17l5-5-5-5"/></svg></button>
                         </div>
                         <div class="flex-1 text-right"> 
-                            <button onclick="pauseTimer();state.mode='setup';render();" class="bg-gray-900 px-6 py-4 rounded-3xl text-[10px] uppercase font-black tracking-widest border border-white/5 hover:bg-red-950 transition-colors">Exit Session</button>
+                            <button onclick="exitSession()" class="bg-gray-900 px-6 py-4 rounded-3xl text-[10px] uppercase font-black tracking-widest border border-white/5 hover:bg-red-950 transition-colors">Exit Session</button>
                         </div>
                     </div>
                 </div>
@@ -1070,17 +1301,6 @@
             state.activities.push(...toAdd);
             state.selectedPresets = {}; 
             state.setupStep = 'schedule'; 
-            render();
-        }
-
-        function createGroupSplit(num) {
-            const groups = [];
-            for(let i=0; i<num; i++) groups.push({ title: `TAP TO ASSIGN`, description: 'Select drill for Group ' + String.fromCharCode(65+i), id: null });
-            state.activities.push({ type: 'station', id: 'station'+Date.now(), duration: 10, groups });
-            state.showSplitSelector = false;
-            // CHANGE: Redirect to SCHEDULE (Step 3) so user sees the station boxes
-            state.setupStep = 'schedule'; 
-            showMessage(`Created split! Tap the group boxes to assign specific drills.`, 'success');
             render();
         }
 
@@ -1110,6 +1330,11 @@
                 ];
             }
             state.activities = activities.map(a => ({...a, id: 'tmp'+Math.random()}));
+            
+            // New Plan - reset ID
+            state.currentPlanId = null;
+            state.practiceName = '';
+            
             state.setupStep = 'schedule';
             showMessage(`${type.replace('-',' ')} template loaded!`, 'success');
             render();
@@ -1120,9 +1345,24 @@
             const d = parseInt(document.getElementById('c-dur').value) || 5;
             const c = document.getElementById('c-cat').value;
             if (t) {
-                state.customActivities.push({ id: 'c'+Date.now(), title: t, duration: d, category: c });
+                const newDrill = { id: 'c'+Date.now(), title: t, duration: d, category: c };
+                state.customActivities.push(newDrill);
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customActivities));
-                state.showCustomForm = false; render();
+                
+                // AUTO-SAVE to Cloud if logged in
+                if (window.currentUser) {
+                    try {
+                        const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", newDrill.id);
+                        window.setDoc(docRef, newDrill);
+                        showMessage('Saved to Cloud Library', 'success');
+                    } catch(e) {
+                        console.error("Cloud save error", e);
+                        showMessage('Saved locally. Cloud error.', 'error');
+                    }
+                }
+
+                state.showCustomForm = false; 
+                render();
             }
         }
 
@@ -1141,6 +1381,10 @@
         window.onload = () => {
             const saved = localStorage.getItem(STORAGE_KEY);
             if (saved) state.customActivities = JSON.parse(saved);
+            
+            // Restore active session
+            restoreActiveSession();
+            
             render();
         };
     </script>
