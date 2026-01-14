@@ -303,6 +303,7 @@
             endTime: '17:00',
             activities: [], 
             customActivities: [], 
+            coachTemplates: [], // NEW: Store coach saved practices
             selectedPresets: {}, 
             options: { enableWhistle: true, enableVoice: true, autoRestSeconds: 0 },
             currentActivityIndex: 0,
@@ -394,6 +395,7 @@
             if (window.currentUser) {
                 state.showLoginModal = false;
                 fetchLibraryFromCloud();
+                fetchCoachTemplates(); // NEW: Load templates on login
 
                 if (state.pendingAction === 'history') {
                     state.pendingAction = null;
@@ -543,8 +545,8 @@
                 if(btn && showAlert) { btn.innerText = "Saving..."; btn.disabled = true; }
                 
                 try {
+                    // 1. SAVE TO HISTORY (Existing Logic)
                     const path = window.collection(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "practice_plans");
-                    
                     const planData = {
                         name: state.practiceName,
                         date: state.practiceDate,
@@ -568,6 +570,25 @@
                         if (showAlert) showMessage('Practice Plan Saved!', 'success');
                     }
 
+                    // 2. NEW: SAVE TO COACH TEMPLATES (If named and manual save)
+                    if (showAlert && state.practiceName && state.practiceName.trim() !== '') {
+                        try {
+                            const templateId = 'tpl_' + state.practiceName.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+                            const tplPath = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "coach_templates", templateId);
+                            
+                            await window.setDoc(tplPath, {
+                                name: state.practiceName,
+                                activities: state.activities,
+                                totalDuration: getTotalDuration(),
+                                updatedAt: new Date().toISOString()
+                            });
+                            // Refresh list so it appears in Step 1 immediately
+                            fetchCoachTemplates();
+                        } catch (err) {
+                            console.error("Template save error", err);
+                        }
+                    }
+
                     if (!showAlert) console.log('Autosaved plan.');
                 } catch (err) {
                     console.error("Firebase Save Error", err);
@@ -576,6 +597,50 @@
                     state.isSaving = false;
                     if(btn && showAlert) { btn.innerHTML = 'Save Plan'; btn.disabled = false; }
                 }
+            }
+        }
+
+        async function fetchCoachTemplates() {
+            if (!window.currentUser) return;
+            try {
+                const path = window.collection(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "coach_templates");
+                const snap = await window.getDocs(path);
+                const templates = [];
+                snap.forEach(doc => templates.push({ id: doc.id, ...doc.data() }));
+                // Sort alphabetically
+                templates.sort((a,b) => a.name.localeCompare(b.name));
+                state.coachTemplates = templates;
+                render();
+            } catch (e) {
+                console.error("Error fetching templates", e);
+            }
+        }
+
+        async function deleteCoachTemplate(id, e) {
+            e.stopPropagation(); // Prevent loading the template when clicking delete
+            if(!confirm("Are you sure you want to delete this saved template?")) return;
+            try {
+                await window.deleteDoc(window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "coach_templates", id));
+                fetchCoachTemplates();
+                showMessage("Template deleted", "success");
+            } catch(e) {
+                console.error(e);
+                showMessage("Error deleting", "error");
+            }
+        }
+
+        function loadCoachTemplate(id) {
+            const tpl = state.coachTemplates.find(t => t.id === id);
+            if (tpl) {
+                // Clone activities with new IDs to avoid reference issues
+                state.activities = tpl.activities.map(a => ({...a, id: 'tplload'+Math.random()}));
+                state.practiceName = tpl.name;
+                
+                // IMPORTANT: Treat as a fresh session, not an edit of the template record itself
+                state.currentPlanId = null; 
+                state.setupStep = 'schedule';
+                showMessage(`Loaded "${tpl.name}"!`, 'success');
+                render();
             }
         }
 
@@ -1129,6 +1194,24 @@
                             </button>
                         </div>
                     </div>
+
+                    <!-- COACH SAVED PRACTICES (NEW) -->
+                    ${state.coachTemplates.length > 0 ? `
+                        <div class="bg-gray-800 p-8 rounded-3xl border-2 border-purple-500 shadow-xl">
+                            <h2 class="text-2xl font-black uppercase text-purple-400 italic mb-6">Coach's Saved Practices</h2>
+                            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                                ${state.coachTemplates.map(tpl => `
+                                    <div class="relative group">
+                                        <button onclick="loadCoachTemplate('${tpl.id}')" class="w-full p-4 bg-gray-900 rounded-xl border border-purple-500/20 hover:border-purple-500 hover:bg-purple-900/20 transition-all text-center h-full flex flex-col justify-center items-center">
+                                            <div class="text-purple-400 font-black mb-1 text-sm group-hover:scale-105 transition-transform line-clamp-2">${tpl.name}</div>
+                                            <div class="text-[9px] opacity-50 uppercase font-bold">${tpl.totalDuration} Min</div>
+                                        </button>
+                                        <button onclick="deleteCoachTemplate('${tpl.id}', event)" class="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 shadow-lg text-xs" title="Delete Template">✕</button>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
 
                     <!-- Bottom Row: Session Type Options -->
                     <div class="bg-gray-800 p-8 rounded-3xl border-2 border-white/10 shadow-xl">
