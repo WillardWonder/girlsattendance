@@ -133,7 +133,7 @@
 
         // --- Library Data ---
         const presetActivities = [
-            // NEUTRAL / OFFENSE
+            // NEUTRAL / OFFENSE (Originals)
             { id: 'n1', title: 'Duck Walk', duration: 5, category: 'Neutral / Offense' },
             { id: 'n2', title: 'Penetration Drills', duration: 10, description: 'Double or High Crotch', category: 'Neutral / Offense' },
             { id: 'n3', title: 'Stagger Stance/Motion', duration: 5, description: 'Head, elbow, feet', category: 'Neutral / Offense' },
@@ -157,8 +157,25 @@
             { id: 'n20', title: 'Ankle Tag', duration: 10, category: 'Neutral / Offense', description: 'Snap if too low for ankle' },
             { id: 'n21', title: 'Sprawl Front Headlock', duration: 10, category: 'Neutral / Offense', description: 'Circle Circle chase ankles' },
             { id: 'n22', title: 'Circle Circle Chase Ankles', duration: 5, category: 'Neutral / Offense' },
+            // NEW NEUTRAL ADDITIONS (Digitized Notes)
+            { id: 'n30', title: 'Hand Fighting (4 Ps)', duration: 5, category: 'Neutral / Offense', description: 'Pound, Pass, Pinch, Pistol' },
+            { id: 'n31', title: 'Circle Penetration Drill', duration: 5, category: 'Neutral / Offense', description: 'Drop, Drop KoToe, Jab Step, 1-2 Go' },
+            { id: 'n32', title: 'Noodle Drill', duration: 5, category: 'Neutral / Offense', description: 'Circle Peel, Xover, Down Block, Pop Double' },
+            { id: 'n33', title: 'Pop Double Series', duration: 10, category: 'Neutral / Offense', description: 'Peel > Block > Double > Drag > Xover Snap' },
+            { id: 'n34', title: 'Snap Down Series', duration: 10, category: 'Neutral / Offense', description: 'Snap Across, Double Cup, Sneak Around' },
+            { id: 'n35', title: 'Pinch Series', duration: 10, category: 'Neutral / Offense', description: 'Pass Bye, Double Pinch, Baseball, Head Throw' },
+            { id: 'n36', title: 'Firemans Series', duration: 10, category: 'Neutral / Offense', description: 'Post>Build, Whip Single Crasher' },
+            { id: 'n37', title: 'Front Headlock Offense', duration: 10, category: 'Neutral / Offense', description: 'Pocket, Post, Punch, Cowboy CJ, Chicken Stick' },
+            { id: 'n38', title: 'Hook Sweep Series', duration: 10, category: 'Neutral / Offense', description: 'Rope + Ankle, Far Side, Reverse Cradle' },
+            { id: 'n39', title: 'Navy / Peterson', duration: 5, category: 'Neutral / Offense' },
+            { id: 'n40', title: 'Sprawling Defense', duration: 5, category: 'Neutral / Offense', description: 'Double, High C, Slide Bye, Sweep' },
+            { id: 'n41', title: 'Counters', duration: 5, category: 'Neutral / Offense', description: 'Square Overhead, Crack of Butt, Shoe Laces' },
+            { id: 'n42', title: 'Crackdown Defense', duration: 5, category: 'Neutral / Offense', description: 'Leg up, Whizzer Wrist, Seat Drop' },
+            { id: 'n43', title: 'Front Head Defense', duration: 5, category: 'Neutral / Offense', description: 'Elbow Head Across, Build' },
+            { id: 'n44', title: 'Throw Series', duration: 10, category: 'Neutral / Offense', description: 'Double Overs, Lateral, Italian' },
+            { id: 'n45', title: 'Pinch Head Throw', duration: 10, category: 'Neutral / Offense', description: 'High Elbow, Pinch Pull Pop' },
 
-            // TOP
+            // TOP (Originals)
             { id: 't1', title: 'Spiral Ride', duration: 5, description: 'Halfs, bar arms, hooks', category: 'Top' },
             { id: 't2', title: 'Leg Riding', duration: 10, description: 'Extend opponent', category: 'Top' },
             { id: 't3', title: 'Reinhardt / Crab Ride', duration: 5, category: 'Top' },
@@ -174,8 +191,18 @@
             { id: 't12', title: 'Keep Flat', duration: 10, category: 'Top', description: 'Blanket use head and toes' },
             { id: 't13', title: 'Run Wrists', duration: 5, category: 'Top' },
             { id: 't14', title: 'Triangle Series', duration: 10, category: 'Top' },
+            // NEW TOP ADDITIONS
+            { id: 't20', title: 'Breakdowns (Basic)', duration: 5, category: 'Top', description: 'Ankle (A), Ankle-Ankle, Far Far, Tight Waist' },
+            { id: 't21', title: 'Pressure Series', duration: 5, category: 'Top', description: 'Crunch, Main Breakdown' },
+            { id: 't22', title: 'Wrist Series', duration: 5, category: 'Top', description: 'Double Wrists, Elbow to Elbow' },
+            { id: 't23', title: 'Crotch/Legs Series', duration: 5, category: 'Top', description: 'Double Crotch, Double Gotcha' },
+            { id: 't24', title: 'Quick Pick', duration: 5, category: 'Top', description: 'Ankle+Knee Load -> Turk/Cradle' },
+            { id: 't25', title: 'Rock Drill', duration: 10, category: 'Top', description: 'Bottom solid, Top rides hard' },
+            { id: 't26', title: 'Riding Drill', duration: 10, category: 'Top', description: 'Constant work, Double wrist @ 2 on 1' },
+            { id: 't27', title: 'Blanket Ride', duration: 10, category: 'Top', description: 'Maintain top control pressure' },
+            { id: 't28', title: 'Med Ball Smash', duration: 5, category: 'Top', description: 'Top pressure drill' },
 
-            // BOTTOM
+            // BOTTOM (Originals)
             { id: 'b1', title: 'Build Base', duration: 5, description: 'Thumbs up, elbows in, head up', category: 'Bottom' },
             { id: 'b2', title: 'Stand Ups', duration: 5, description: 'Switches, 1/4 turns', category: 'Bottom' },
             { id: 'b3', title: 'Sit Out / Popcorn', duration: 5, category: 'Bottom' },
@@ -188,8 +215,20 @@
             { id: 'b9', title: 'Quadpod Knee Jam', duration: 10, category: 'Bottom' },
             { id: 'b10', title: 'Movement Hand Control', duration: 10, category: 'Bottom', description: 'Change over, quad, sit, heist' },
             { id: 'b11', title: 'Stuff Head / Push Knees', duration: 10, category: 'Bottom', description: 'Sprawl Double/Single' },
+            // NEW BOTTOM ADDITIONS
+            { id: 'b20', title: 'Animal Warm-up', duration: 5, category: 'Bottom', description: 'Kick Through, Bear Crab, Hip Heist' },
+            { id: 'b21', title: 'Shoulder Rolls', duration: 5, category: 'Bottom', description: 'Walking, Knees+Punch, Quad Step' },
+            { id: 'b22', title: 'Swisher', duration: 5, category: 'Bottom', description: 'Quick hip movement drill' },
+            { id: 'b23', title: 'Build a Base Series', duration: 5, category: 'Bottom', description: 'Inchworm, Knee to Elbow, Run Bottom Knee' },
+            { id: 'b24', title: 'Diamond Base Series', duration: 5, category: 'Bottom', description: 'Heel Flip, XFace Swim, Find Hands' },
+            { id: 'b25', title: 'Sit Out Series', duration: 5, category: 'Bottom', description: 'Short Sit, Palm Up, Change Directions' },
+            { id: 'b26', title: 'XOver Switch', duration: 5, category: 'Bottom', description: 'Change Over Reversal' },
+            { id: 'b27', title: 'Funk 1/2 Step Over', duration: 5, category: 'Bottom' },
+            { id: 'b28', title: 'Counter 1/2 Series', duration: 5, category: 'Bottom', description: 'Bridging, Wing Down, Run Knee, Wrist Roll' },
+            { id: 'b29', title: 'Counter Arm Bar', duration: 5, category: 'Bottom', description: 'Shoulder Post, Roll' },
+            { id: 'b30', title: 'Hammer Lock Defense', duration: 5, category: 'Bottom' },
 
-            // CONDITIONING
+            // CONDITIONING (Originals)
             { id: 'c1', title: 'Sprints', duration: 20, category: 'Conditioning' },
             { id: 'c2', title: 'Ropes / Chair Dips', duration: 10, category: 'Conditioning' },
             { id: 'c3', title: 'Run & Lift', duration: 15, description: 'Work till they drop', category: 'Conditioning' },
@@ -215,6 +254,24 @@
             { id: 'c22', title: 'Knee Running', duration: 2, category: 'Conditioning', description: 'Ninja Training' },
             { id: 'c23', title: 'Sideways Plank Walk', duration: 2, category: 'Conditioning', description: 'Ninja Training' },
             { id: 'c24', title: 'Seal Crawl', duration: 2, category: 'Conditioning', description: 'Ninja Training' },
+            // NEW CONDITIONING & FUN
+            { id: 'c30', title: 'Med Ball Circuit', duration: 15, category: 'Conditioning', description: 'Slams, Twists, V-Ups, Throws' },
+            { id: 'c31', title: 'Stability Ball Circuit', duration: 15, category: 'Conditioning', description: 'Jackknives, Curls, Hip Switch' },
+            { id: 'c32', title: 'TRX Circuit', duration: 15, category: 'Conditioning', description: 'Knuckle Up, Skaters, Rows' },
+            { id: 'c33', title: 'Box Circuit', duration: 15, category: 'Conditioning', description: 'Step Ups, Jumps, Mt Climbers' },
+            { id: 'c34', title: 'Dumbbell Circuit', duration: 15, category: 'Conditioning', description: 'Push Press, Deadlift, Bench, Squat' },
+            { id: 'c35', title: 'Kettlebell Circuit', duration: 15, category: 'Conditioning', description: 'Cleans, Squats, Swings, Halo' },
+            { id: 'c36', title: '13 Stations Circuit', duration: 20, category: 'Conditioning', description: '25s ON / 10s OFF' },
+            { id: 'c37', title: 'Groups of 6 Interval', duration: 15, category: 'Conditioning', description: '2min ON / 20s REST' },
+            { id: 'c38', title: 'Lap Circuit', duration: 20, category: 'Conditioning', description: 'Run 1 Lap > Exercise Block > Repeat' },
+            { id: 'c39', title: 'Finisher', duration: 5, category: 'Conditioning', description: '100-200 Jump Ropes + KB' },
+            { id: 'c40', title: 'Single Arm Power', duration: 10, category: 'Conditioning', description: 'Heavy rows, swings, deads, cleans' },
+            { id: 'fun1', title: 'Table Wrestling', duration: 10, category: 'Conditioning', description: 'Push out of circle on knees' },
+            { id: 'fun2', title: 'Stability Ball Battles', duration: 10, category: 'Conditioning', description: 'Flat / Rugby' },
+            { id: 'fun3', title: 'Queen + Court', duration: 10, category: 'Conditioning', description: 'King/Queen of the ring' },
+            { id: 'fun4', title: 'Steal the Bacon', duration: 10, category: 'Conditioning' },
+            { id: 'fun5', title: 'Hose Wrestling', duration: 10, category: 'Conditioning' },
+            { id: 'fun6', title: 'Steering Wheel Jet Skies', duration: 5, category: 'Conditioning' },
 
             // COOL DOWN
             { id: 'cd1', title: 'Partner Static Stretching', duration: 5, description: 'Post-match recovery', category: 'Cool Down' },
