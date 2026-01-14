@@ -269,7 +269,8 @@
             authPass: '',
             authIsRegister: false,
             authError: '',
-            authLoading: false
+            authLoading: false,
+            isSaving: false // NEW: Prevent double submissions
         };
 
         const STORAGE_KEY = 'wrestling-system-v5'; // Custom library
@@ -287,7 +288,8 @@
                 intervalId: null, // Don't save the timer ID
                 isRunning: false, // Always save as paused so it doesn't auto-start on reload
                 showLoginModal: false, // Don't reopen modals automatically
-                showAccountModal: false
+                showAccountModal: false,
+                isSaving: false
             };
             localStorage.setItem(SESSION_KEY, JSON.stringify(stateToSave));
         }
@@ -314,6 +316,20 @@
                     console.error("Error restoring session", e);
                 }
             }
+        }
+
+        // --- HELPER: De-duplicate Drills ---
+        // This merges built-in presets with cloud/local custom activities based on ID
+        function getAllDrills() {
+            const drillMap = new Map();
+            
+            // 1. Add Presets
+            presetActivities.forEach(d => drillMap.set(d.id, d));
+            
+            // 2. Add/Override with Custom/Cloud (if ID matches, cloud wins)
+            state.customActivities.forEach(d => drillMap.set(d.id, d));
+            
+            return Array.from(drillMap.values());
         }
 
         // --- AUTH & EVENT HANDLING ---
@@ -419,7 +435,10 @@
         async function startPractice() {
             initAudio(); // Fix 3: Init Audio on interaction
             requestWakeLock(); // Fix 2: Keep screen awake
-            savePracticePlan(false); // Autosave (silent)
+            
+            // Fix: Await the save to prevent duplicates if user hits play quickly after load
+            await savePracticePlan(false); // Autosave (silent)
+            
             state.mode = 'live';
             state.currentActivityIndex = 0;
             state.elapsedSeconds = 0;
@@ -458,6 +477,10 @@
                 return;
             }
 
+            // Prevent overlapping saves
+            if (state.isSaving) return;
+            state.isSaving = true;
+
             if (window.currentUser && window.db) {
                 const btn = document.getElementById('save-plan-btn');
                 if(btn && showAlert) { btn.innerText = "Saving..."; btn.disabled = true; }
@@ -493,6 +516,7 @@
                     console.error("Firebase Save Error", err);
                     if (showAlert) showMessage('Save Failed', 'error');
                 } finally {
+                    state.isSaving = false;
                     if(btn && showAlert) { btn.innerHTML = 'Save Plan'; btn.disabled = false; }
                 }
             }
@@ -511,7 +535,10 @@
 
             try {
                 const batch = window.writeBatch(window.db);
-                const allDrills = [...presetActivities, ...state.customActivities];
+                // Use getAllDrills to ensure we don't try to sync duplicates,
+                // though usually we want to push from presets to ensure they exist.
+                // It is safer to push unique items.
+                const allDrills = getAllDrills(); 
                 
                 allDrills.forEach(drill => {
                     const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", drill.id);
@@ -534,9 +561,16 @@
             const c = document.getElementById('c-cat').value;
             if (t) {
                 const newDrill = { id: 'c'+Date.now(), title: t, duration: d, category: c };
+                
+                // Update local immediately for UI responsiveness
                 state.customActivities.push(newDrill);
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state.customActivities));
                 
+                // Close form and render local change immediately
+                state.showCustomForm = false; 
+                render();
+
+                // Background Sync to Cloud
                 if (window.currentUser) {
                     try {
                         const docRef = window.doc(window.db, "artifacts", window.appId, "users", window.currentUser.uid, "drill_library", newDrill.id);
@@ -547,9 +581,6 @@
                         showMessage('Saved locally. Cloud error.', 'error');
                     }
                 }
-
-                state.showCustomForm = false; 
-                render();
             }
         }
 
@@ -1081,7 +1112,8 @@
         }
 
         function renderLibrary() {
-            const all = [...presetActivities, ...state.customActivities];
+            // FIX: Use getAllDrills() to deduplicate items from local and cloud
+            const all = getAllDrills();
             const categories = [...new Set(all.map(a => a.category))];
             const selCount = Object.keys(state.selectedPresets).length;
 
@@ -1290,7 +1322,8 @@
 
         function renderStationAssignModal() {
             const { aidx, gidx } = state.stationEditId;
-            const all = [...presetActivities, ...state.customActivities];
+            // FIX: Use getAllDrills() to deduplicate items from local and cloud
+            const all = getAllDrills();
             return `
                 <div class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
                     <div class="bg-gray-800 rounded-[3rem] border-2 border-blue-500 w-full max-w-3xl max-h-[85vh] flex flex-col shadow-2xl">
@@ -1448,7 +1481,8 @@
         function togglePreset(id) {
             if (state.selectedPresets[id]) delete state.selectedPresets[id];
             else {
-                const item = [...presetActivities, ...state.customActivities].find(x => x.id === id);
+                // FIX: Use getAllDrills() to ensure consistent selection logic
+                const item = getAllDrills().find(x => x.id === id);
                 state.selectedPresets[id] = { ...item };
             }
             render();
@@ -1468,7 +1502,8 @@
 
         function editStationGroup(aidx, gidx) { state.stationEditId = { aidx, gidx }; render(); }
         function assignToStation(aidx, gidx, pid) {
-            const move = [...presetActivities, ...state.customActivities].find(x => x.id === pid);
+            // FIX: Use getAllDrills() for consistency
+            const move = getAllDrills().find(x => x.id === pid);
             state.activities[aidx].groups[gidx] = { ...move };
             state.stationEditId = null;
             render();
@@ -1478,6 +1513,16 @@
             let activities = [];
             let name = '';
             
+            // --- REUSABLE BLOCKS ---
+            const kEssentials = [
+               { title: 'Leap Frog Shot', duration: 2, category: 'Neutral / Offense', description: 'Essential 1/6' },
+               { title: 'Diamond Build Ups', duration: 2, category: 'Bottom', description: 'Essential 2/6' },
+               { title: 'Short Sit Crab to Bear Knee Jam', duration: 2, category: 'Bottom', description: 'Essential 3/6' },
+               { title: 'Sprawl Push Aways', duration: 2, category: 'Neutral / Offense', description: 'Essential 4/6' },
+               { title: 'Bridge Circles', duration: 2, category: 'Conditioning', description: 'Essential 5/6' },
+               { title: 'Chest Spin', duration: 2, category: 'Neutral / Offense', description: 'Essential 6/6' }
+            ];
+
             if (type === 'comp-warmup') {
                 activities = [
                     { title: 'Dynamic Warm-up', duration: 10, category: 'Neutral / Offense' },
@@ -1495,15 +1540,8 @@
                 ];
                 name = 'Comp Cooldown';
             } else if (type === 'kjays-essentials') {
-                // Break out the 6 essentials individually
-                activities = [
-                   { title: 'Leap Frog Shot', duration: 2, category: 'Neutral / Offense' },
-                   { title: 'Diamond Build Ups', duration: 2, category: 'Bottom' },
-                   { title: 'Short Sit Crab to Bear Knee Jam', duration: 2, category: 'Bottom' },
-                   { title: 'Sprawl Push Aways', duration: 2, category: 'Neutral / Offense' },
-                   { title: 'Bridge Circles', duration: 2, category: 'Conditioning' },
-                   { title: 'Chest Spin', duration: 2, category: 'Neutral / Offense' }
-                ];
+                // Just the 6 essentials
+                activities = [...kEssentials];
                 name = 'K-Jays 6 Essentials';
             } else if (type === 'kjays-ninja') {
                 // FULL BREAKDOWN OF NINJA TRAINING
@@ -1533,57 +1571,57 @@
                 name = 'K-Jays Ninja Training';
             } else if (type === 'kjays-day3') {
                 activities = [
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
-                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials' },
+                    ...kEssentials,
+                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials', description: 'Agility & Tumbling Series' },
                     { title: 'Ankle Tag', duration: 10, category: 'Neutral / Offense', notes: 'Snap if too low for ankle Double Tie' },
                     { title: 'Stuff Head / Push Knees', duration: 10, category: 'Bottom', notes: 'Sprawl Double/Single' },
                     { title: 'Mat Return', duration: 10, category: 'Top', notes: 'Break Table Ankle' },
                     { title: 'Half / Counter Half', duration: 10, category: 'Top', notes: 'Keep Flat' },
                     { title: 'Quadpod Knee Jam', duration: 10, category: 'Bottom', notes: 'Sit out (hip heist)' },
                     { title: 'Finish Talk', duration: 5, category: 'Specials', notes: 'What was fun tonight?' },
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
+                    ...kEssentials,
                     { title: 'Clean Up', duration: 15, category: 'Specials' }
                 ];
                 name = 'K-Jays Day 3';
             } else if (type === 'kjays-day4') {
                 activities = [
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
-                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials' },
+                    ...kEssentials,
+                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials', description: 'Agility & Tumbling Series' },
                     { title: 'Triangle Series', duration: 10, category: 'Top', notes: 'Ankle Tag / Head position / Knees' },
                     { title: 'Sprawl Front Headlock', duration: 10, category: 'Neutral / Offense', notes: 'Circle Circle chase ankles' },
                     { title: 'Counter Half', duration: 10, category: 'Top' },
                     { title: 'Diamond Build Up', duration: 10, category: 'Bottom' },
                     { title: 'Live Scenarios', duration: 10, category: 'Neutral / Offense' },
                     { title: 'Finish Talk', duration: 5, category: 'Specials', notes: 'What was fun tonight?' },
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
+                    ...kEssentials,
                     { title: 'Clean Up', duration: 15, category: 'Specials' }
                 ];
                 name = 'K-Jays Day 4';
             } else if (type === 'kjays-day5') {
                  activities = [
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
-                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials' },
+                    ...kEssentials,
+                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials', description: 'Agility & Tumbling Series' },
                     { title: 'Double Tie', duration: 10, category: 'Neutral / Offense', notes: 'Snap or Ankle / Good stance hand fight' },
                     { title: 'Defense', duration: 10, category: 'Neutral / Offense', notes: 'Double/Single push knees, spin' },
                     { title: 'Break Table', duration: 10, category: 'Top', notes: 'Pick, Far Far' },
                     { title: 'Keep Flat', duration: 10, category: 'Top', notes: 'Blanket use head and toes Half/Counter' },
                     { title: 'Movement w/ Hand Control', duration: 10, category: 'Bottom', notes: 'Change over, quad, sit, heist' },
                     { title: 'Finish Talk', duration: 5, category: 'Specials', notes: 'What was fun tonight?' },
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
+                    ...kEssentials,
                     { title: 'Clean Up', duration: 15, category: 'Specials' }
                 ];
                 name = 'K-Jays Day 5';
             } else if (type === 'kjays-day6') {
                  activities = [
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
-                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials' },
+                    ...kEssentials,
+                    { title: 'Ninja Training Circuit', duration: 10, category: 'Specials', description: 'Agility & Tumbling Series' },
                     { title: 'Ankle Tag', duration: 10, category: 'Neutral / Offense', notes: 'Head position / Knees Triangle series' },
                     { title: 'Defense', duration: 10, category: 'Neutral / Offense', notes: 'Pressure, light on toes Double /Single' },
                     { title: 'Break Table', duration: 10, category: 'Top', notes: 'Returns, Ankles, Far Far' },
                     { title: 'Keep Flat', duration: 10, category: 'Top', notes: 'Run Wrists' },
                     { title: 'Build Up', duration: 10, category: 'Bottom', notes: 'Sit, Heist, Quad, Roll' },
                     { title: 'Finish Talk', duration: 5, category: 'Specials', notes: 'What was fun tonight?' },
-                    { title: 'K-Jays 6 Essentials Circuit', duration: 15, category: 'Specials' },
+                    ...kEssentials,
                     { title: 'Clean Up', duration: 15, category: 'Specials' }
                 ];
                 name = 'K-Jays Day 6';
